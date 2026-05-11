@@ -2,7 +2,7 @@
 
 ## Decision
 
-Open Design owns the Tailwind color vocabulary. Tailwind v4 is configured with CSS-first `@theme`, clears the default color namespace with `--color-*: initial`, and exposes only project color tokens backed by `apps/web/src/index.css` CSS variables.
+Open Design owns the Tailwind color, radius, and shadow vocabulary. Tailwind v4 is configured with CSS-first `@theme`, clears the default color namespace with `--color-*: initial`, and exposes project tokens backed by `apps/web/src/index.css` CSS variables.
 
 The runtime source of truth stays in `:root`, `[data-theme="dark"]`, and system-mode CSS variable overrides. Tailwind utilities resolve through those variables, so light mode, dark mode, system mode, and custom accent all share one token path.
 
@@ -15,12 +15,12 @@ Token names follow the current product language in `index.css` for core surfaces
 - Border tokens keep the `border-*` scale: `border`, `border-strong`, `border-soft`.
 - Accent tokens keep the `accent-*` scale because user custom accent writes the same CSS variables at runtime.
 - Status tokens use semantic names in Tailwind: `success`, `info`, `discovery`, `danger`, `warning`.
-- Tailwind utility names should read as project concepts: `bg-panel`, `text-muted`, `border-border-strong`, `text-danger`, `bg-success-surface`, `rounded-card`, and `shadow-token-sm`.
+- Tailwind utility names should read as project concepts: `bg-panel`, `text-muted`, `border-border-strong`, `text-danger`, `bg-success-surface`, `bg-selection-overlay`, `rounded-card`, and `shadow-token-sm`.
 - Radius and shadow utilities use project theme aliases backed by `--radius*` and `--shadow*`; font, spacing, and typography scale use Tailwind's native utilities such as `font-mono`, `gap-3`, and `text-sm`.
 
 ## Design decision: token-backed color, radius, and shadow
 
-Project-owned tokens cover colors, radius, and shadow because color carries Open Design's brand and theme behavior, while existing cards, popovers, modals, and controls depend on project radius and shadow variables for visual stability.
+Project-owned tokens cover colors, radius, and shadow because color carries Open Design's brand and theme behavior, while existing cards, popovers, modals, inputs, and controls depend on project radius and shadow variables for visual stability.
 
 Radius and shadow aliases resolve to the current CSS variables, including dark-theme shadow overrides. Font, spacing, and type scale use Tailwind's native system to keep TSX class names familiar during migration:
 
@@ -28,7 +28,25 @@ Radius and shadow aliases resolve to the current CSS variables, including dark-t
 className="rounded-card shadow-token-sm font-mono bg-panel text-text border border-border"
 ```
 
-Global base styles in `index.css` continue to set the app-level font family, page background, and text color. Component-level font changes can use native Tailwind utilities. If a future visual requirement needs another branded elevation or shape with stable cross-component meaning, add that token intentionally at that time.
+Global base styles in `index.css` continue to set the app-level font family, page background, and text color. Component-level font changes can use native Tailwind utilities.
+
+## Required `index.css` source variables
+
+The implementation should add these source variables before using the corresponding `@theme` aliases, so Tailwind theme values still point to the runtime CSS-variable source of truth:
+
+```css
+:root {
+  --accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-foreground: #fff;
+  --warning-border: color-mix(in srgb, var(--amber) 35%, transparent);
+  --overlay: rgba(28, 27, 26, 0.42);
+  --selection-overlay: rgba(59, 130, 246, 0.18);
+  --selection-outline: rgba(59, 130, 246, 0.55);
+  --inspect-overlay: rgba(59, 130, 246, 0.12);
+}
+```
+
+The blue selection/inspect values are product interaction tokens for preview annotation overlays. File color conversion helpers that transport user-authored colors remain allowlisted exceptions.
 
 ## `@theme` block
 
@@ -62,8 +80,8 @@ Global base styles in `index.css` continue to set the app-level font family, pag
   --color-accent-soft: var(--accent-soft);
   --color-accent-tint: var(--accent-tint);
   --color-accent-hover: var(--accent-hover);
-  --color-accent-wash: color-mix(in srgb, var(--accent) 12%, transparent);
-  --color-accent-foreground: #fff;
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-foreground: var(--accent-foreground);
 
   /* Semantic status */
   --color-success: var(--green);
@@ -81,12 +99,15 @@ Global base styles in `index.css` continue to set the app-level font family, pag
   --color-danger-foreground: var(--bg-panel);
   --color-warning: var(--amber);
   --color-warning-surface: var(--amber-bg);
-  --color-warning-border: color-mix(in srgb, var(--amber) 35%, transparent);
+  --color-warning-border: var(--warning-border);
 
   /* Interaction and overlays */
   --color-focus: var(--accent);
   --color-focus-ring: var(--accent-soft);
-  --color-overlay: rgba(28, 27, 26, 0.42);
+  --color-overlay: var(--overlay);
+  --color-selection-overlay: var(--selection-overlay);
+  --color-selection-outline: var(--selection-outline);
+  --color-inspect-overlay: var(--inspect-overlay);
   --color-control-hover: var(--bg-subtle);
   --color-control-active: var(--bg-muted);
 
@@ -144,8 +165,8 @@ Global base styles in `index.css` continue to set the app-level font family, pag
 | `--accent-soft` | `--color-accent-soft` | `bg-accent-soft`, `ring-accent-soft`, `shadow-[0_0_0_3px_var(--color-accent-soft)]` | Soft halo, input focus ring, active outline glow. |
 | `--accent-tint` | `--color-accent-tint` | `bg-accent-tint` | Warm selected fills, gradient stops, subtle primary surfaces. |
 | `--accent-hover` | `--color-accent-hover` | `bg-accent-hover`, `border-accent-hover` | Primary button hover state. |
-| Derived from `--accent` | `--color-accent-wash` | `bg-accent-wash` | Very quiet active fills using `color-mix(in srgb, var(--accent) 12%, transparent)`. |
-| Literal `#fff` used on accent buttons | `--color-accent-foreground` | `text-accent-foreground` | Text and icons on solid accent surfaces. |
+| `--accent-wash` | `--color-accent-wash` | `bg-accent-wash` | Very quiet active fills using `color-mix(in srgb, var(--accent) 12%, transparent)`. |
+| `--accent-foreground` | `--color-accent-foreground` | `text-accent-foreground` | Text and icons on solid accent surfaces. |
 
 ### Semantic status
 
@@ -166,7 +187,7 @@ Global base styles in `index.css` continue to set the app-level font family, pag
 | `--bg-panel` on solid danger | `--color-danger-foreground` | `text-danger-foreground` | Text/icons on solid danger surfaces. |
 | `--amber` | `--color-warning` | `text-warning`, `bg-warning` | Warning and caution status. |
 | `--amber-bg` | `--color-warning-surface` | `bg-warning-surface` | Warning status surface. |
-| Derived from `--amber` | `--color-warning-border` | `border-warning-border` | Warning status border. Add a real `--amber-border` later if warnings need hand-tuned contrast. |
+| `--warning-border` | `--color-warning-border` | `border-warning-border` | Warning status border. Add a real `--amber-border` later if warnings need hand-tuned contrast. |
 
 ### Interaction and overlay
 
@@ -174,7 +195,10 @@ Global base styles in `index.css` continue to set the app-level font family, pag
 | --- | --- | --- | --- |
 | `--accent` | `--color-focus` | `outline-focus`, `ring-focus` | Focus-visible outlines and direct focus borders. |
 | `--accent-soft` | `--color-focus-ring` | `ring-focus-ring` | Input and composer halo states. |
-| `rgba(28, 27, 26, 0.42)` from `.modal-backdrop` | `--color-overlay` | `bg-overlay` | Modal scrim/backdrop. |
+| `--overlay` | `--color-overlay` | `bg-overlay` | Modal scrim/backdrop. |
+| `--selection-overlay` | `--color-selection-overlay` | `bg-selection-overlay` | Selected preview/comment overlays. |
+| `--selection-outline` | `--color-selection-outline` | `border-selection-outline`, `ring-selection-outline` | Selected preview/comment overlay outlines. |
+| `--inspect-overlay` | `--color-inspect-overlay` | `bg-inspect-overlay` | Inspect hover overlays and annotation hints. |
 | `--bg-subtle` | `--color-control-hover` | `bg-control-hover` | Default neutral hover fill for controls. |
 | `--bg-muted` | `--color-control-active` | `bg-control-active` | Neutral pressed/active fill for controls. |
 
@@ -205,7 +229,12 @@ Use this vocabulary for TSX migrations.
 - Text: `text-text`, `text-strong`, `text-muted`, `text-soft`, `text-faint`, `placeholder:text-faint`.
 - Accent: `bg-accent`, `text-accent`, `border-accent`, `bg-accent-hover`, `text-accent-strong`, `bg-accent-tint`, `bg-accent-soft`, `text-accent-foreground`.
 - Status: `text-success`, `bg-success-surface`, `border-success-border`, `text-info`, `bg-info-surface`, `border-info-border`, `text-discovery`, `bg-discovery-surface`, `border-discovery-border`, `text-danger`, `bg-danger-surface`, `border-danger-border`, `text-warning`, `bg-warning-surface`, `border-warning-border`.
-- Interaction: `outline-focus`, `ring-focus`, `ring-focus-ring`, `bg-overlay`, `bg-control-hover`, `bg-control-active`.
+- Interaction: `outline-focus`, `ring-focus`, `ring-focus-ring`, `bg-overlay`, `bg-selection-overlay`, `border-selection-outline`, `ring-selection-outline`, `bg-inspect-overlay`, `bg-control-hover`, `bg-control-active`.
+
+### Radius and shadow utilities
+
+- Radius: `rounded-control`, `rounded-card`, `rounded-panel`, `rounded-token-pill`.
+- Shadows: `shadow-token-xs`, `shadow-token-sm`, `shadow-token-md`, `shadow-token-lg`.
 
 ### Utility examples
 
@@ -219,9 +248,11 @@ Use this vocabulary for TSX migrations.
 2. Keep raw CSS variables as the visual source in `index.css`; Tailwind `@theme` tokens should reference `var(--*)` for theme-sensitive values.
 3. Use status names in TSX. Examples: `text-danger`, `bg-success-surface`, `border-info-border`.
 4. Use project-backed radius and shadow utilities for migrated components that currently depend on `--radius*` or `--shadow*`; examples include `rounded-card`, `rounded-panel`, `shadow-token-sm`, and `shadow-token-md`.
-5. Keep brand assets, SVG illustration colors, sketch/canvas user colors, and file color conversion helpers as documented exceptions.
-6. Add one color token before repeating the same arbitrary color value in multiple components.
-7. Keep complex one-off gradients and `color-mix()` expressions local during migration only when they encode component-specific art direction; promote repeated patterns into the interaction/status tokens above.
+5. Use complete static class maps for dynamic variants. Avoid fragment interpolation such as `bg-${status}-surface`; prefer maps such as `{ success: 'bg-success-surface text-success', danger: 'bg-danger-surface text-danger' }`. Add an explicit safelist only when runtime-generated classes are required.
+6. Use `selection`/`inspect` tokens for preview annotation overlays in app UI and edit-mode integration. Keep file color conversion helpers allowlisted only when they transport user-authored colors.
+7. Keep brand assets, SVG illustration colors, sketch/canvas user colors, and file color conversion helpers as documented exceptions.
+8. Add one color token before repeating the same arbitrary color value in multiple components.
+9. Keep complex one-off gradients and `color-mix()` expressions local during migration only when they encode component-specific art direction; promote repeated patterns into the interaction/status tokens above.
 
 ## Existing conflicts and exception handling
 
@@ -231,7 +262,7 @@ The current codebase has a small set of color sources that need either migration
 
 - `apps/web/src/components/SettingsDialog.tsx:4244,4255,4358,4369-4370` uses legacy variable names and fallback colors such as `var(--danger-fg, #f88)`, `var(--warning-fg, #fbbf24)`, `var(--fg-2, #9aa0a6)`, `var(--surface-2, #11141a)`, and `var(--fg-1, #e6e6e6)`. Replace these with current tokens or Tailwind utilities such as `text-danger`, `border-warning-border`, `text-muted`, `bg-subtle`, and `text-text`.
 - `apps/web/src/index.css:200,202,449,454,1303-1311,6492-6500,8130-8133` contains component-level hardcoded foregrounds, shadows, status fallbacks, and live artifact badge colors. Replace these with `--accent*`, `--info*`, `--danger*`, `--success*`, `--warning*`, `--color-accent-foreground`, or migrated Tailwind token utilities.
-- `apps/web/src/components/FileViewer.tsx:2350-2352` and `apps/web/src/edit-mode/bridge.ts:200-202` use blue inspect/comment overlay colors. Treat these as `info` if the visual intent is informational; add a dedicated `selection`/`inspect` token later if this interaction color becomes a repeated product concept.
+- `apps/web/src/components/FileViewer.tsx:2350-2352` and `apps/web/src/edit-mode/bridge.ts:200-202` use blue inspect/comment overlay colors. Replace these with `selection`/`inspect` tokens because preview annotation overlays are a repeated product interaction concept.
 
 ### Allowlist as intentional exceptions
 
@@ -239,7 +270,7 @@ The current codebase has a small set of color sources that need either migration
 - One-off SVG illustrations and previews: `apps/web/src/components/NewProjectPanel.tsx:888-912` preview artwork and `apps/web/src/components/NewProjectPanel.tsx:1674-1677` generated HSL artwork. Prefer CSS variables when practical, but allow fixed SVG/art colors when the values encode the illustration itself.
 - User-controlled color input and persisted accent defaults: `apps/web/src/state/config.ts`, `apps/web/src/state/appearance.ts`, `apps/web/src/components/SettingsDialog.tsx:4486-4495` accent palette, and `apps/web/src/components/pet/PetSettings.tsx:41-48` pet accent settings. These values are inputs to the token system or user content.
 - Canvas and sketch colors: `apps/web/src/components/SketchEditor.tsx` brush colors and canvas drawing colors. Use tokens for UI controls around the canvas; keep user drawing data as user content. The eraser/background color can use `var(--bg)` when it represents the app canvas background.
-- File/content color conversion, inspect/comment overlays, and inspect overrides: `apps/web/src/components/FileViewer.tsx` helpers, `apps/web/src/components/FileViewer.tsx:2350-2352` overlay variables, and related tests. These operate on user-authored HTML/CSS, browser computed colors, or preview annotation overlays.
+- File/content color conversion and inspect overrides: `apps/web/src/components/FileViewer.tsx` helpers and related tests may keep raw values only when they operate on user-authored HTML/CSS or browser computed colors. Preview annotation overlays use the `selection`/`inspect` tokens above.
 - Manual edit user input examples: `apps/web/src/components/ManualEditPanel.tsx:309` placeholder colors are examples of user-authored CSS values, not app chrome styling.
 - External document, iframe, popup, and generated runtime HTML styles: `apps/web/src/runtime/exports.ts`, `apps/web/src/runtime/react-component.ts`, `apps/web/src/providers/registry.ts:423-488`, and `apps/web/src/edit-mode/bridge.ts`. These documents may run outside the app CSS/Tailwind context, so inline values are acceptable when scoped and documented.
 - Tests and fixtures under `apps/web/tests/` when the colors are test data for user content, accent normalization, or override parsing.
