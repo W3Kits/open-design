@@ -545,6 +545,93 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
+  test('renders the Orbit Open artifact link as a desktop new-tab link when a live artifact target exists', async () => {
+    await seedDesktopConfig(desktop, {
+      mode: 'api',
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProtocol: 'openai',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+      agentId: null,
+      skillId: null,
+      designSystemId: null,
+      composio: { apiKeyConfigured: true },
+      orbit: {
+        enabled: false,
+        time: '09:00',
+        templateSkillId: 'orbit-general',
+      },
+      onboardingCompleted: true,
+      mediaProviders: {},
+      agentModels: {},
+      theme: 'system',
+    }, 'model');
+
+    await desktop.eval(`
+      (() => {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+          const url = typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+          if (url === '/api/orbit/status') {
+            return new Response(JSON.stringify({
+              running: false,
+              nextRunAt: null,
+              lastRun: {
+                completedAt: '2026-05-06T10:00:00.000Z',
+                trigger: 'manual',
+                templateSkillId: 'orbit-general',
+                connectorsChecked: 5,
+                connectorsSucceeded: 3,
+                connectorsSkipped: 2,
+                connectorsFailed: 0,
+                markdown: 'General latest summary',
+                artifactId: 'artifact-123',
+                artifactProjectId: 'project-456',
+              },
+              lastRunsByTemplate: {
+                'orbit-general': {
+                  completedAt: '2026-05-06T10:00:00.000Z',
+                  trigger: 'manual',
+                  templateSkillId: 'orbit-general',
+                  connectorsChecked: 5,
+                  connectorsSucceeded: 3,
+                  connectorsSkipped: 2,
+                  connectorsFailed: 0,
+                  markdown: 'General latest summary',
+                  artifactId: 'artifact-123',
+                  artifactProjectId: 'project-456',
+                },
+              },
+            }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return originalFetch(input, init);
+        };
+        return true;
+      })()
+    `);
+
+    await desktop.openSettings();
+    await openDesktopSettingsSection(desktop, 'Orbit');
+
+    await waitFor(async () => {
+      const snapshot = await readDesktopOrbitSnapshot(desktop);
+      expect(snapshot.dialogOpen).toBe(true);
+      expect(snapshot.heading).toBe('Orbit');
+      expect(snapshot.sectionTitle).toBe('Orbit');
+      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
+      expect(snapshot.openArtifactTarget).toBe('_blank');
+      expect(snapshot.openArtifactRel).toContain('noreferrer');
+    });
+  }, 45_000);
+
   test('routes the Orbit gate CTA to the Connectors section inside the desktop shell', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -766,6 +853,9 @@ type DesktopOrbitSnapshot = {
   dialogOpen: boolean;
   gateVisible: boolean;
   heading: string | null;
+  openArtifactHref: string | null;
+  openArtifactRel: string | null;
+  openArtifactTarget: string | null;
   runButtonVisible: boolean;
   sectionTitle: string | null;
 };
@@ -981,11 +1071,16 @@ async function readDesktopOrbitSnapshot(
     (() => {
       const sectionTitle = document.querySelector('.orbit-section .orbit-hero-title')
         ?.textContent?.trim() ?? null;
+      const openArtifactLink = Array.from(document.querySelectorAll('a'))
+        .find((node) => node.textContent?.trim() === 'Open artifact');
       return {
         automationCardVisible: Boolean(document.querySelector('[data-testid="orbit-automation-card"]')),
         dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
         gateVisible: Boolean(document.querySelector('[data-testid="orbit-config-gate"]')),
         heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
+        openArtifactHref: openArtifactLink?.getAttribute('href') ?? null,
+        openArtifactRel: openArtifactLink?.getAttribute('rel') ?? null,
+        openArtifactTarget: openArtifactLink?.getAttribute('target') ?? null,
         runButtonVisible: Boolean(Array.from(document.querySelectorAll('button'))
           .find((node) => node.textContent?.trim() === 'Run it now')),
         sectionTitle,

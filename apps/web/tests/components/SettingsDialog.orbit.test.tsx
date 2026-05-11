@@ -797,4 +797,82 @@ describe('SettingsDialog Orbit connector gate refresh', () => {
     expect(screen.getByText('Editorial summary')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
   });
+
+  it('restores the live artifact strip when switching back from a legacy markdown template', async () => {
+    vi.mocked(fetchConnectors).mockResolvedValue([connectedConnector]);
+    vi.mocked(fetchSkills).mockResolvedValue(orbitTemplates);
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/orbit/status') {
+        return new Response(JSON.stringify({
+          running: false,
+          nextRunAt: null,
+          lastRun: {
+            completedAt: '2026-05-06T09:00:00.000Z',
+            trigger: 'scheduled',
+            templateSkillId: 'orbit-editorial',
+            connectorsChecked: 7,
+            connectorsSucceeded: 2,
+            connectorsSkipped: 4,
+            connectorsFailed: 1,
+            markdown: 'Editorial summary',
+          },
+          lastRunsByTemplate: {
+            'orbit-general': {
+              completedAt: '2026-05-06T10:00:00.000Z',
+              trigger: 'manual',
+              templateSkillId: 'orbit-general',
+              connectorsChecked: 5,
+              connectorsSucceeded: 3,
+              connectorsSkipped: 2,
+              connectorsFailed: 0,
+              markdown: 'General latest summary',
+              artifactId: 'artifact-123',
+              artifactProjectId: 'project-456',
+            },
+            'orbit-editorial': {
+              completedAt: '2026-05-06T09:00:00.000Z',
+              trigger: 'scheduled',
+              templateSkillId: 'orbit-editorial',
+              connectorsChecked: 7,
+              connectorsSucceeded: 2,
+              connectorsSkipped: 4,
+              connectorsFailed: 1,
+              markdown: 'Editorial summary',
+            },
+          },
+        }), { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    }) as typeof fetch;
+
+    render(
+      <SettingsDialog
+        initial={{ ...baseConfig, orbit: { ...baseConfig.orbit, templateSkillId: 'orbit-editorial' } }}
+        agents={[]}
+        daemonLive
+        appVersionInfo={null}
+        initialSection="orbit"
+        onPersist={vi.fn()}
+        onPersistComposioKey={vi.fn()}
+        onClose={vi.fn()}
+        onRefreshAgents={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Open artifact' })).toBeNull();
+    });
+    expect(screen.getByText('Editorial summary')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Orbit prompt template'), {
+      target: { value: 'orbit-general' },
+    });
+
+    const openArtifactLink = await screen.findByRole('link', { name: 'Open artifact' });
+    expect(openArtifactLink.getAttribute('href')).toBe(
+      '/api/live-artifacts/artifact-123/preview?projectId=project-456',
+    );
+    expect(screen.getByText('General latest summary')).toBeTruthy();
+  });
 });
