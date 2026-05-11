@@ -80,6 +80,19 @@ This file is the single source of truth for agents entering this repository. Rea
 - Blocking review feedback should focus on correctness, security/secrets, data integrity, repository boundary violations, contract/migration breakage, missing required validation, or high-risk maintainability issues.
 - Only maintainers may close a PR instead of requesting changes, and only when the change is not salvageable on the existing branch (wrong target product, foreign test harness, DOM/API assumptions absent from this repo, or scripts that conflict with lifecycle rules).
 
+## PR-duty tooling
+
+`pnpm tools-pr` is the maintainer-only control plane for PR-duty work on this repo. It is a thin `gh` wrapper that encodes repo-specific knowledge — review-lane derivation, forbidden-surface flags, per-lane checklists, validation-command suggestions, and a fixed dictionary of factual classify tags (`bot-only-approval`, `needs-rebase`, `stale-approval`, `unresolved-changes-requested`, `awaiting-*` timing, `org-member`, etc.). The tool is read-only on the PR surface: it never approves, merges, comments, or closes; those side effects stay in explicit `gh` invocations the maintainer runs.
+
+Common subcommands:
+
+- `pnpm tools-pr list` — triage the open queue by lane and review-state bucket.
+- `pnpm tools-pr view <num>` — factual review brief for a single PR.
+- `pnpm tools-pr classify --all` — script-level tag JSON for the whole open queue (entry point for cron / digest consumers); per-PR `classify <num>` for spot checks.
+- `pnpm tools-pr assignment` — assigner-perspective ownership + idle-time / blocker view across the queue.
+
+For the full tag dictionary, operational playbook (direct merge / duplicate-title / awaiting-author / org-member / agent-review flows), comment templates, language-detection rules, and tool-design constraints (precision boundaries, factual-output rule, retry + pagination strategy), see [`tools/pr/AGENTS.md`](tools/pr/AGENTS.md).
+
 ## Validation strategy
 
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
