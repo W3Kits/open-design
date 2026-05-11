@@ -1344,6 +1344,128 @@ function baseLiveArtifactWorkspaceEntry(
 }
 
 describe('LiveArtifactViewer', () => {
+  it('enters and exits in-tab presentation from the present menu', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /present/i })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /in this tab/i }));
+
+    await waitFor(() => {
+      expect(container.querySelector('.live-artifact-viewer.is-tab-present')).toBeTruthy();
+    });
+    expect(screen.getByRole('button', { name: /exit fullscreen/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /exit fullscreen/i }));
+    await waitFor(() => {
+      expect(container.querySelector('.live-artifact-viewer.is-tab-present')).toBeNull();
+    });
+  });
+
+  it('keeps in-tab presentation off when fullscreen request fails', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /present/i })).toBeTruthy();
+    });
+
+    const requestFullscreen = vi.fn(() => Promise.reject(new Error('denied')));
+    const previewHost = container.querySelector('.live-artifact-preview-frame-host');
+    expect(previewHost).toBeTruthy();
+    Object.defineProperty(previewHost!, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /fullscreen/i }));
+
+    await waitFor(() => {
+      expect(requestFullscreen).toHaveBeenCalled();
+    });
+    expect(container.querySelector('.live-artifact-viewer.is-tab-present')).toBeNull();
+    expect(screen.queryByRole('button', { name: /exit fullscreen/i })).toBeNull();
+  });
+
+  it('requests fullscreen without entering in-tab presentation when fullscreen succeeds', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /present/i })).toBeTruthy();
+    });
+
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    const previewHost = container.querySelector('.live-artifact-preview-frame-host');
+    expect(previewHost).toBeTruthy();
+    Object.defineProperty(previewHost!, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /present/i }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /fullscreen/i }));
+
+    await waitFor(() => {
+      expect(requestFullscreen).toHaveBeenCalled();
+    });
+    expect(container.querySelector('.live-artifact-viewer.is-tab-present')).toBeNull();
+    expect(screen.queryByRole('button', { name: /exit fullscreen/i })).toBeNull();
+  });
+
   it('opens the rendered preview in a new tab from the present menu', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
@@ -1378,6 +1500,7 @@ describe('LiveArtifactViewer', () => {
       '_blank',
       'noopener,noreferrer',
     );
+    expect(screen.queryByRole('button', { name: /exit fullscreen/i })).toBeNull();
   });
 
   it('closes the present menu on Escape without tearing down the viewer', async () => {
