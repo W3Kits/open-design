@@ -1344,6 +1344,21 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  'assistant.feedbackPrompt': string;
+  'assistant.feedbackPositive': string;
+  'assistant.feedbackNegative': string;
+  'assistant.feedbackReasonTitle': string;
+  'assistant.feedbackReasonPositiveMatched': string;
+  'assistant.feedbackReasonPositiveVisual': string;
+  'assistant.feedbackReasonPositiveUseful': string;
+  'assistant.feedbackReasonPositiveEasy': string;
+  'assistant.feedbackReasonNegativeMissed': string;
+  'assistant.feedbackReasonNegativeVisual': string;
+  'assistant.feedbackReasonNegativeIncomplete': string;
+  'assistant.feedbackReasonNegativeHard': string;
+  'assistant.feedbackReasonOther': string;
+  'assistant.feedbackReasonPlaceholder': string;
+  'assistant.feedbackReasonSubmit': string;
   'assistant.emptyResponseLabel': string;
   'assistant.emptyResponseMessage': string;
   'assistant.unfinishedLabel': string;
@@ -1522,15 +1537,4 @@ export interface Dict {
   'sketch.closeConfirm': string;
   'sketch.textPrompt': string;
   'sketch.textModalTitle': string;
-  // Message-level feedback widget (issue #1288)
-  'feedback.prompt': string;
-  'feedback.thumbsUp': string;
-  'feedback.thumbsDown': string;
-  'feedback.submittedPositive': string;
-  'feedback.submittedNegative': string;
-  'feedback.commentLabel': string;
-  'feedback.commentPlaceholder': string;
-  'feedback.commentSubmit': string;
-  'feedback.commentSaved': string;
-  'feedback.change': string;
 }

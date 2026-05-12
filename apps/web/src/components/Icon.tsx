@@ -46,6 +46,8 @@ type IconName =
   | 'sparkles'
   | 'stop'
   | 'sun-moon'
+  | 'thumbs-down'
+  | 'thumbs-up'
   | 'tweaks'
   | 'upload'
   | 'trash'
@@ -429,6 +431,20 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M20 12h2" />
           <path d="m6.3 17.7-1.4 1.4" />
           <path d="m19.1 4.9-1.4 1.4" />
+        </svg>
+      );
+    case 'thumbs-up':
+      return (
+        <svg {...common}>
+          <path d="M7 10v11" />
+          <path d="M15 6.8 14 10h4.5a2 2 0 0 1 2 2.3l-1.1 6.6A2.5 2.5 0 0 1 17 21H6a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h2.8L12 4a2 2 0 0 1 3 2.8Z" />
+        </svg>
+      );
+    case 'thumbs-down':
+      return (
+        <svg {...common}>
+          <path d="M7 14V3" />
+          <path d="m15 17.2-1-3.2h4.5a2 2 0 0 0 2-2.3L19.4 5A2.5 2.5 0 0 0 17 3H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2.8L12 20a2 2 0 0 0 3-2.8Z" />
         </svg>
       );
     case 'tweaks':

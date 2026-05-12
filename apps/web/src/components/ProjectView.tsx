@@ -71,6 +71,7 @@ import type {
   ChatAttachment,
   ChatCommentAttachment,
   ChatMessage,
+  ChatMessageFeedbackChange,
   Conversation,
   DesignSystemSummary,
   OpenTabsState,
@@ -916,6 +917,37 @@ export function ProjectView({
       });
     },
     [project.id, activeConversationId],
+  );
+
+  const handleAssistantFeedback = useCallback(
+    (assistantMessage: ChatMessage, change: ChatMessageFeedbackChange) => {
+      const now = Date.now();
+      updateMessageById(
+        assistantMessage.id,
+        (prev) =>
+          change
+            ? {
+                ...prev,
+                feedback: {
+                  rating: change.rating,
+                  reasonCodes: change.reasonCodes,
+                  customReason: change.customReason,
+                  reasonsSubmittedAt: change.reasonsSubmittedAt,
+                  createdAt:
+                    prev.feedback?.rating === change.rating
+                      ? prev.feedback.createdAt
+                      : now,
+                  updatedAt: now,
+                },
+              }
+            : {
+                ...prev,
+                feedback: undefined,
+              },
+        true,
+      );
+    },
+    [updateMessageById],
   );
 
   const appendAssistantErrorEvent = useCallback(
@@ -2432,6 +2464,7 @@ export function ProjectView({
                 void handleSend(text, [], []);
               }}
               onContinueRemainingTasks={handleContinueRemainingTasks}
+              onAssistantFeedback={handleAssistantFeedback}
               onNewConversation={handleNewConversation}
               newConversationDisabled={newConversationDisabled}
               conversations={conversations}

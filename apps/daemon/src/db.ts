@@ -92,6 +92,7 @@ function migrate(db: SqliteDb): void {
       events_json TEXT,
       attachments_json TEXT,
       produced_files_json TEXT,
+      feedback_json TEXT,
       started_at INTEGER,
       ended_at INTEGER,
       position INTEGER NOT NULL,
@@ -217,6 +218,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'comment_attachments_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN comment_attachments_json TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
   }
 
   const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all() as DbRow[];
@@ -724,6 +728,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               attachments_json AS attachmentsJson,
               comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
+              feedback_json AS feedbackJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
@@ -745,7 +750,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           SET role = ?, content = ?, agent_id = ?, agent_name = ?,
               run_id = ?, run_status = ?, last_run_event_id = ?,
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
-              produced_files_json = ?, started_at = ?, ended_at = ?
+              produced_files_json = ?, feedback_json = ?, started_at = ?, ended_at = ?
         WHERE id = ?`,
     ).run(
       m.role,
@@ -759,6 +764,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
+      m.feedback ? JSON.stringify(m.feedback) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
       m.id,
@@ -770,17 +776,17 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       )
       .get(conversationId) as DbRow | undefined;
     const position = (max?.m ?? -1) + 1;
-    // 17 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 18 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
-    // comment_attachments_json, produced_files_json, started_at, ended_at,
+    // comment_attachments_json, produced_files_json, feedback_json, started_at, ended_at,
     // position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
-          started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          feedback_json, started_at, ended_at, position, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -795,6 +801,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
+      m.feedback ? JSON.stringify(m.feedback) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
       position,
@@ -815,6 +822,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               attachments_json AS attachmentsJson,
               comment_attachments_json AS commentAttachmentsJson,
               produced_files_json AS producedFilesJson,
+              feedback_json AS feedbackJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
@@ -1058,6 +1066,7 @@ function normalizeMessage(row: DbRow) {
     attachments: parseJsonOrUndef(row.attachmentsJson),
     commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
+    feedback: parseJsonOrUndef(row.feedbackJson),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,
