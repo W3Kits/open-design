@@ -165,6 +165,11 @@ test.describe('Settings Local CLI Codex fallback UX', () => {
     expect(lastRequest).toMatchObject({
       mode: 'agent',
       agentId: 'codex',
+      agentCliEnv: {
+        codex: {
+          CODEX_BIN: configuredPath,
+        },
+      },
     });
 
     await dialog.getByRole('button', { name: 'Use detected Codex' }).click();
