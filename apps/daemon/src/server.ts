@@ -4058,9 +4058,9 @@ export async function startServer({
     // the browser can append them to the assistant's text buffer.
     let agentStreamError = null;
     // Tracks whether any stream the run is using actually emitted user-
-    // visible content. Only the streams routed through `sendAgentEvent`
-    // contribute to this flag; ACP sessions and plain stdout streams are
-    // covered by their own success/failure paths and the empty-output
+    // visible content. Only streams routed through `sendAgentEvent` contribute
+    // to the substantive-output guard; ACP sessions and plain stdout streams
+    // are covered by their own success/failure paths and the empty-output
     // guard below skips them via `trackingSubstantiveOutput`.
     let agentProducedOutput = false;
     let trackingSubstantiveOutput = false;
@@ -4078,6 +4078,14 @@ export async function startServer({
       'tool_result',
       'artifact',
     ]);
+    const forwardAgentEvent = (ev) => {
+      lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
+      noteAgentActivity();
+      if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
+        agentVisibleText += ev.delta;
+      }
+      send('agent', ev);
+    };
     const sendAgentEvent = (ev) => {
       if (ev?.type === 'error') {
         if (agentStreamError) return;
@@ -4089,23 +4097,14 @@ export async function startServer({
         }));
         return;
       }
-      lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
-      noteAgentActivity();
       if (ev?.type && SUBSTANTIVE_AGENT_EVENT_TYPES.has(ev.type)) {
         agentProducedOutput = true;
       }
-      if (ev?.type === 'text_delta' && typeof ev.delta === 'string') {
-        agentVisibleText += ev.delta;
-      }
-      send('agent', ev);
+      forwardAgentEvent(ev);
     };
 
     if (def.streamFormat === 'claude-stream-json') {
-      const claude = createClaudeStreamHandler((ev) => {
-        lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
-        noteAgentActivity();
-        send('agent', ev);
-      });
+      const claude = createClaudeStreamHandler(forwardAgentEvent);
       child.stdout.on('data', (chunk) => claude.feed(chunk));
       child.on('close', () => claude.flush());
     } else if (def.streamFormat === 'qoder-stream-json') {
@@ -4114,11 +4113,7 @@ export async function startServer({
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
-      const copilot = createCopilotStreamHandler((ev) => {
-        lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
-        noteAgentActivity();
-        send('agent', ev);
-      });
+      const copilot = createCopilotStreamHandler(forwardAgentEvent);
       child.stdout.on('data', (chunk) => copilot.feed(chunk));
       child.on('close', () => copilot.flush());
     } else if (def.streamFormat === 'pi-rpc') {
