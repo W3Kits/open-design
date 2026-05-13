@@ -1,7 +1,7 @@
 ---
 id: 20260513-unify-agent-runtime-abstraction
 name: Unify Agent Runtime Abstraction
-status: researched
+status: designed
 created: '2026-05-13'
 ---
 
@@ -62,34 +62,162 @@ created: '2026-05-13'
 
 ## Design
 
-<!-- Technical approach, architecture decisions, and test strategy. Each design decision should cite a fact source. -->
+### Architecture Overview
+
+```mermaid
+flowchart TD
+  Def[RuntimeAgentDef\nlaunch metadata + adapter id] --> Resolver[resolveRuntimeAdapter(def)]
+  Resolver --> Adapter[RuntimeAdapter\nprotocol/session/output behavior]
+  Chat[/api/chat startChatRun] --> Adapter
+  Conn[connectionTest] --> Adapter
+  Adapter --> Sink[RuntimeSink]
+  Sink --> SSE[SSE: agent/stdout/stderr/error/end]
+  Adapter --> Session[RuntimeSession\ncancel/fatal/completion]
+  Session --> Run[run.runtimeSession\ncompat: run.acpSession]
+```
+
+采用两层模型：`RuntimeAgentDef` 保留进程启动、参数、环境、能力声明等元数据；新增 daemon-local runtime adapter 层统一承接协议/session/stdout/parser/完成语义。`server.ts` 和 `connectionTest.ts` 只解析 adapter 并调用统一方法，不再按具体 `streamFormat` 分支。
+
+### Change Scope
+
+- Area: daemon runtime definitions. Impact: 将 `RuntimeAgentDef.streamFormat` 从上层分支依据逐步收敛为 adapter 选择器或兼容字段，保留 `buildArgs`、env、model、image、prompt budget 等 launch metadata。Source: `apps/daemon/src/runtimes/types.ts:37-68`, `apps/daemon/src/runtimes/registry.ts:19-48`
+- Area: daemon runtime adapter module. Impact: 新增 `apps/daemon/src/runtimes/runtime-adapters.ts`（或同等模块）集中实现 parser/session/stdin/prompt/MCP/close policy。Source: `apps/daemon/src/server.ts:4080-4176`, `apps/daemon/src/connectionTest.ts:901-968`
+- Area: `/api/chat` orchestration. Impact: `server.ts` 保留 run 生命周期、spawn、SSE sink 和诊断，但通过 adapter 处理 stdin、prompt delivery、stream attachment、runtime session、close override。Source: `apps/daemon/src/server.ts:3787-3860,4061-4264`
+- Area: connection tests. Impact: `connectionTest.ts` 复用同一 adapter attach/close 行为，避免第二套 runtime dispatch drift。Source: `apps/daemon/src/connectionTest.ts:901-968,1126-1292`
+- Area: prompt composition and critique eligibility. Impact: 用 adapter capability 表达 plain/API prompt mode 与 Critique Theater eligibility，避免上层继续以 `streamFormat === 'plain'` 推断。Source: `apps/daemon/src/prompts/system.ts:258-267`, `apps/daemon/src/server.ts:3079-3098,3923-3944`
+- Area: external MCP delivery. Impact: Claude `.mcp.json` 与 ACP MCP descriptors 进入 adapter prepare hook，上层只传递规范化 MCP context。Source: `apps/daemon/src/server.ts:3515-3586`
+
+### Design Decisions
+
+- Decision: 使用“definition = launch metadata，adapter = protocol behavior”的两层模型；`server.ts`/`connectionTest.ts` 不直接分支具体 parser/session/runtime format。Source: `apps/daemon/src/runtimes/types.ts:37-68`, `apps/daemon/src/server.ts:4080-4176`, `apps/daemon/src/connectionTest.ts:901-968`
+- Decision: adapter 解析必须 fail fast；每个 `AGENT_DEFS` entry 必须解析到 adapter，未知 adapter id 直接抛错，不回退到 plain/mock behavior。Source: `apps/daemon/src/runtimes/registry.ts:19-48`, `apps/daemon/src/runtimes/types.ts:50-55`
+- Decision: 引入 `RuntimeSink`，由共享 sink 维护 `agent`/`stdout`/`stderr`/`error` 发射、activity 更新、structured error、substantive-output tracking；adapter 只把协议输出规范化给 sink。Source: `apps/daemon/src/server.ts:4061-4078,4088-4167`
+- Decision: stdin mode 与 prompt delivery 属于 adapter；Pi/ACP 通过 session/RPC 交付 prompt，plain/JSON/stdin runtimes 才写 child stdin，避免双写。Source: `apps/daemon/src/server.ts:3811-3860,4101-4154,4266-4268`, `apps/daemon/src/connectionTest.ts:1126-1127,1284-1292`
+- Decision: session-aware runtimes 返回统一 `RuntimeSession`，包含 `abort`、`hasFatalError`、`completedSuccessfully` 等能力；实现阶段可先写入 `run.runtimeSession` 并兼容赋值到现有 `run.acpSession`。Source: `apps/daemon/src/server.ts:4174-4176,4196-4244`, `apps/daemon/src/connectionTest.ts:893-899,1197-1220`
+- Decision: close-status policy 由 adapter/session 提供 override；generic close handler 只合并 cancel、exit code、signal、stream error、empty-output guard 与 adapter override。Source: `apps/daemon/src/server.ts:4192-4264`, `apps/daemon/src/connectionTest.ts:1197-1220`
+- Decision: prompt-mode、Critique Theater、substantive-output tracking 改为显式 capabilities，避免通过 `streamFormat` 字符串推断行为。Source: `apps/daemon/src/prompts/system.ts:258-267`, `apps/daemon/src/server.ts:3079-3098,3923-3944,4040-4078`
+- Decision: 保持现有 SSE contract 不变；structured handlers 继续发 `agent`，plain streams 继续发 `stdout`，错误发 `error`，run 终止发 `end`。Source: `apps/daemon/src/runs.ts:49-89`, `apps/daemon/src/server.ts:4061-4078,4168-4172,4264`
+- Decision: 本次重构不改变 Claude external MCP 写入失败的 best-effort 语义，只迁移位置；是否改为 hard failure 另行决策。Source: `apps/daemon/src/server.ts:3515-3586`
+
+### Why this design
+
+- 把 runtime 差异集中到 adapter，直接满足“新增/调整 runtime 主要改底层 runtime 定义或适配模块”的目标。
+- 复用同一 adapter 给 chat 和 connection test，减少两条路径行为漂移。
+- 保留现有 parser/session 模块和 SSE contract，降低行为保持型重构风险。
+- 显式 capability 比 `streamFormat` 字符串推断更可维护，也让 Critique Theater、prompt mode、empty-output guard 等业务决策可审查。
+
+### Test Strategy
+
+- Phase/area: adapter registry. Validation: 每个 `AGENT_DEFS` entry 可解析 adapter；未知 adapter id 抛错；禁止 silent plain fallback。Source: `apps/daemon/src/runtimes/registry.ts:19-48`
+- Phase/area: adapter attach behavior. Validation: fake child streams 覆盖 Claude/Qoder/Copilot/JSON-event/plain/Pi/ACP 输出到正确 sink channel，stderr 保持 `stderr`。Source: `apps/daemon/src/server.ts:4080-4176`, `apps/daemon/src/connectionTest.ts:901-968`
+- Phase/area: prompt/stdin/session. Validation: plain/stdin runtimes 写 stdin；Pi/ACP 不双写 stdin；Pi/ACP 暴露 fatal/completion/cancel handle。Source: `apps/daemon/src/server.ts:3811-3860,4101-4154,4266-4268`
+- Phase/area: close semantics. Validation: Qoder/Pi/JSON-event error frame 标记 failed；tracked structured stream 空输出失败；ACP clean SIGTERM 成功；真实非零退出仍失败。Source: `apps/daemon/src/server.ts:4088-4167,4196-4244`
+- Phase/area: duplication guard. Validation: 增加源边界回归测试或 guard，禁止 `server.ts`/`connectionTest.ts` 重新出现 `def.streamFormat ===`、直接 parser handler imports、直接 `attachAcpSession`/`attachPiRpcSession` 调用。Source: `apps/daemon/src/server.ts:4080-4176`, `apps/daemon/src/connectionTest.ts:901-968`
+- Phase/area: existing regression suites. Validation: 继续运行 `apps/daemon/tests/structured-streams.test.ts`、`qoder-stream.test.ts`、`json-event-stream.test.ts`、`pi-rpc.test.ts`、`acp.test.ts`，以及 `pnpm --filter @open-design/daemon test`、`pnpm --filter @open-design/daemon typecheck`、`pnpm guard`、`pnpm typecheck`。Source: `apps/daemon/tests/structured-streams.test.ts:1-10`, `apps/daemon/tests/qoder-stream.test.ts:1-18`, `apps/daemon/tests/json-event-stream.test.ts:1-14`, `apps/daemon/tests/pi-rpc.test.ts:1-10`, `apps/daemon/tests/acp.test.ts:1-10`
+
+### Pseudocode
+
+Flow:
+  Resolve `def = getAgentDef(agentId)`
+  Resolve `adapter = resolveRuntimeAdapter(def)`; throw on missing adapter
+  Ask adapter capabilities for prompt mode / critique eligibility / substantive-output tracking
+  Compose prompt with explicit prompt mode capability
+  Let adapter prepare runtime-specific external MCP delivery
+  Spawn child with `adapter.stdinMode(ctx)`
+  Create `RuntimeSink` bound to SSE + run state
+  Call `attachment = adapter.attach({ child, prompt, cwd, model, mcpServers, sink, ... })`
+  Store `attachment.session` on run for cancellation
+  Let adapter deliver prompt when needed
+  On close, merge generic status with `attachment.closePolicy` / session status
+
+### File Structure
+
+- `apps/daemon/src/runtimes/types.ts` - add adapter id/capability/session/adapter context types while preserving launch metadata.
+- `apps/daemon/src/runtimes/runtime-adapters.ts` - adapter registry/resolver and shared behavior interfaces.
+- `apps/daemon/src/runtimes/runtime-sink.ts` - normalized sink helpers for chat and connection test usage, if separating keeps dependencies cleaner.
+- `apps/daemon/src/server.ts` - replace format dispatch with adapter calls; keep run lifecycle, SSE wiring, diagnostics, and spawn ownership.
+- `apps/daemon/src/connectionTest.ts` - replace local `attachAgentStreamHandlers` dispatch with shared adapter attach and close policy.
+- `apps/daemon/src/prompts/system.ts` and `packages/contracts/src/prompts/system.ts` - replace stream-format-based API/plain prompt decision with explicit semantic prompt mode if contract surface needs to stay aligned.
+- `apps/daemon/tests/*runtime-adapter*.test.ts` - new focused adapter/sink/registry regression coverage.
+
+### Interfaces / APIs
+
+```ts
+type RuntimeAdapterId =
+  | 'plain'
+  | 'claude-stream-json'
+  | 'qoder-stream-json'
+  | 'copilot-stream-json'
+  | 'json-event-stream'
+  | 'pi-rpc'
+  | 'acp-json-rpc';
+
+type RuntimeCapabilities = {
+  promptMode: 'api-plain' | 'tooling';
+  critiqueTheater: boolean;
+  tracksSubstantiveOutput: boolean;
+};
+
+type RuntimeSink = {
+  agent(ev: unknown): void;
+  stdout(chunk: string): void;
+  stderr(chunk: string): void;
+  error(message: string, options?: { retryable?: boolean; details?: unknown }): void;
+  activity(summary?: string): void;
+};
+
+type RuntimeSession = {
+  abort?: () => void;
+  hasFatalError?: () => boolean;
+  completedSuccessfully?: () => boolean;
+};
+
+type RuntimeAttachment = {
+  session?: RuntimeSession | null;
+  flush?: () => void;
+  closeOverride?: (exit: { code: number | null; signal: NodeJS.Signals | null }) => 'succeeded' | 'failed' | null;
+};
+
+type RuntimeAdapter = {
+  id: RuntimeAdapterId;
+  capabilities: RuntimeCapabilities;
+  stdinMode(ctx: RuntimeContext): 'pipe' | 'ignore';
+  prepareExternalMcp?(ctx: RuntimeContext): Promise<void>;
+  attach(ctx: RuntimeAttachContext): RuntimeAttachment;
+  deliverPrompt?(ctx: RuntimePromptContext): void;
+};
+```
+
+### Edge Cases
+
+- Qoder/Pi/JSON-event structured error frame 必须继续使 run failed，不能被当作普通 `agent` event 转发后成功结束。Source: `apps/daemon/src/server.ts:4088-4167,4196-4223`
+- Pi/ACP session prompt delivery 与 stdin prompt delivery 互斥，避免 prompt 重复发送或 session 被破坏。Source: `apps/daemon/src/server.ts:3811-3860,4101-4154,4266-4268`
+- ACP clean completion 后的 forced SIGTERM 仍应判定 succeeded；其他 signal/non-zero exit 保持 failed。Source: `apps/daemon/src/server.ts:4224-4244`, `apps/daemon/src/connectionTest.ts:1197-1220`
+- Plain stdout 继续发 `stdout` 而不是 `agent`，避免改变 web/client event contract。Source: `apps/daemon/src/server.ts:4168-4172`
+- `start` event 中的 `streamFormat` 如有客户端依赖可暂时保留为 opaque metadata，但上层代码不得再基于它分支。Source: `apps/daemon/src/server.ts:3787-3799`
+- Claude CLI diagnostic tails 仍需从 raw stdout/stderr 捕获，迁移 adapter 时不能丢失诊断输入。Source: `apps/daemon/src/server.ts:3872-3882,4177-4183,4247-4264`
 
 ## Plan
 
-<!-- Optional: Step breakdown for complex features that need multiple implementation steps.
-     Decided during Design. Checked off during Implement.
-     Keep this section compact and step-based.
-     Use markdown checkboxes for all step and substep items, for example:
-     - [ ] Step 1: Foo
-       - [ ] Substep 1.1 Implement: Foo foundation
-       - [ ] Substep 1.2 Implement: Foo integration
-       - [ ] Substep 1.3 Implement: Foo edge handling
-       - [ ] Substep 1.4 Verify: Foo automated coverage
-       - [ ] Substep 1.5 Verify: Foo manual workflow
-     - [ ] Step 2: Bar
-       - [ ] Substep 2.1 Implement: Bar
-       - [ ] Substep 2.2 Verify: Bar
-     - [ ] Step 3: Baz
-       - [ ] Substep 3.1 Implement: Baz
-       - [ ] Substep 3.2 Verify: Baz
-     Use a capability-based step breakdown with reviewable, meaningful increments.
-     Good boundaries align with one user-visible workflow, one subsystem/integration boundary, one migration/rollout step, or one stabilization milestone.
-     Each step must include small, independent substeps for implementation and immediate testing/verification.
-     Within each step, list implementation substeps before verification substeps.
-     The final step may focus on overall testing/verification, edge cases, regression coverage, and coverage improvements.
-     A step is complete only when relevant tests pass.
-     Size steps so one coding agent can implement + validate in a single session.
-     Write each substep as one small, independent task. -->
+- [ ] Step 1: Add adapter foundation
+  - [ ] Substep 1.1 Implement: add runtime adapter id/capability/session/context types.
+  - [ ] Substep 1.2 Implement: add adapter resolver covering every existing `AGENT_DEFS` runtime.
+  - [ ] Substep 1.3 Implement: add normalized sink helpers without changing existing SSE channel names.
+  - [ ] Substep 1.4 Verify: unit-test resolver coverage, unknown adapter failure, and sink channel mapping.
+- [ ] Step 2: Move stream/session attachment behind adapters
+  - [ ] Substep 2.1 Implement: migrate Claude/Qoder/Copilot/JSON-event/plain attachment logic into adapters.
+  - [ ] Substep 2.2 Implement: migrate Pi/ACP session attachment and runtime session handles into adapters.
+  - [ ] Substep 2.3 Implement: update `connectionTest.ts` to consume shared adapters first.
+  - [ ] Substep 2.4 Verify: run daemon parser/session tests plus new fake-child adapter tests.
+- [ ] Step 3: Refactor chat orchestration to adapter calls
+  - [ ] Substep 3.1 Implement: replace `server.ts` stream-format dispatch with adapter attach/deliverPrompt/session/close policy calls.
+  - [ ] Substep 3.2 Implement: move stdin mode, prompt delivery, external MCP preparation, and close overrides into adapter hooks.
+  - [ ] Substep 3.3 Implement: preserve `run.acpSession` compatibility while introducing generic runtime session naming.
+  - [ ] Substep 3.4 Verify: run daemon tests and add regression coverage for empty-output, structured error, and ACP clean SIGTERM behavior.
+- [ ] Step 4: Remove upper-layer format knowledge
+  - [ ] Substep 4.1 Implement: replace prompt mode and Critique Theater format checks with adapter capabilities.
+  - [ ] Substep 4.2 Implement: add guard/regression check preventing direct runtime format dispatch in `server.ts` and `connectionTest.ts`.
+  - [ ] Substep 4.3 Verify: run `pnpm --filter @open-design/daemon test`, `pnpm --filter @open-design/daemon typecheck`, `pnpm guard`, and `pnpm typecheck`.
 
 ## Notes
 
