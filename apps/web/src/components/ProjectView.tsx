@@ -43,6 +43,7 @@ import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import { isMacPlatform } from '../utils/platform';
+import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
@@ -1603,6 +1604,12 @@ export function ProjectView({
           );
           void patchConversation(project.id, runConversationId, { title });
         }
+        const projectName = summarizeProjectNameFromPrompt(prompt);
+        if (projectName && projectName !== project.name) {
+          const updated: Project = { ...project, name: projectName, updatedAt: Date.now() };
+          onProjectChange(updated);
+          void patchProject(project.id, { name: projectName });
+        }
       }
 
       // Snapshot the file list at turn-start so we can diff after the
@@ -1987,6 +1994,7 @@ export function ProjectView({
       composedSystemPrompt,
       onTouchProject,
       project.id,
+      project.name,
       projectFiles,
       refreshProjectFiles,
       refreshLiveArtifacts,
@@ -1999,6 +2007,7 @@ export function ProjectView({
       clearStreamingMarker,
       clearActiveRunRefs,
       onProjectsRefresh,
+      onProjectChange,
     ],
   );
 

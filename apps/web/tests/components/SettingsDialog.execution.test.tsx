@@ -1830,7 +1830,7 @@ describe('SettingsDialog pets interactions', () => {
       { initialSection: 'pet' },
     );
 
-    expect((screen.getByRole('button', { name: 'Wake' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Show pet' }) as HTMLButtonElement).disabled).toBe(false);
 
     await waitFor(() => {
       expect(screen.getByText('Dario')).toBeTruthy();
@@ -1909,9 +1909,10 @@ describe('SettingsDialog pets interactions', () => {
       { initialSection: 'pet' },
     );
 
-    const toggle = screen.getByRole('button', { name: 'Tuck away' });
+    const toggle = screen.getByRole('button', { name: 'Hide pet' });
     fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Wake' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show pet' })).toBeTruthy();
+    expect(screen.getByText('Hide pet')).toBeTruthy();
 
     await waitForPersist(
       onPersist,
