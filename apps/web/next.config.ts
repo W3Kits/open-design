@@ -20,6 +20,7 @@ const isProd = process.env.NODE_ENV !== 'development';
 const webOutputMode = process.env.OD_WEB_OUTPUT_MODE;
 const isServerOutput = webOutputMode === 'server' || webOutputMode === 'standalone';
 const shouldStaticExport = isProd && !isServerOutput;
+const isW3KitsPluginBuild = process.env.W3KITS_PLUGIN_BUILD === '1';
 
 const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_ROOT = dirname(dirname(WEB_ROOT));
@@ -61,6 +62,7 @@ const nextConfig: NextConfig = {
         // index.html on disk).
         trailingSlash: true,
         images: { unoptimized: true },
+        ...(isW3KitsPluginBuild ? { assetPrefix: './' } : {}),
       }
     : webOutputMode === 'standalone'
       ? {
