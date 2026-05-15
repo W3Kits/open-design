@@ -10,14 +10,15 @@
    actions, so the entry view does not render `AppChromeHeader`. */
 .entry-shell--no-header {
   grid-template-rows: 1fr;
+  --entry-rail-width: 56px;
 }
 
 /* Left rail */
 .entry-nav-rail {
-  width: 64px;
+  width: var(--entry-rail-width, 64px);
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
-  padding: 14px 0 10px;
+  padding: 8px 0 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -269,8 +270,8 @@
   padding: 0;
   /* Used by descendants (e.g. the plugins-home Scenario row) to
      pin themselves directly below the sticky topbar. Mirrors the
-     topbar's vertical footprint (8px top + 32px chip + 8px bottom). */
-  --entry-topbar-h: 48px;
+     topbar's vertical footprint (12px top + 32px chip). */
+  --entry-topbar-h: 44px;
 }
 .entry-main__inner {
   width: 100%;
@@ -307,7 +308,16 @@
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 12px 16px 0;
+  background: var(--bg);
+  isolation: isolate;
+}
+.entry-main__topbar::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0;
+  z-index: -1;
+  pointer-events: none;
   background: var(--bg);
 }
 /* Chip group — the GitHub star, inline model switcher, and Use
