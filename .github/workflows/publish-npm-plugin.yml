@@ -15,19 +15,21 @@ permissions:
 jobs:
   publish:
     runs-on: self-hosted
+    env:
+      NODE22_BIN: /home/agent/actions-runner-w3kits-plugin-marketplace-2/_work/_tool/node/22.12.0/x64/bin
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.12.0
-          registry-url: https://registry.npmjs.org
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @open-design/web test tests/w3kits-daemon-shim.test.ts
-      - run: pnpm build
+      - name: Use host Node 22
+        run: |
+          set -euo pipefail
+          echo "$NODE22_BIN" >> "$GITHUB_PATH"
+          "$NODE22_BIN/node" --version
+          "$NODE22_BIN/npm" --version
+          "$NODE22_BIN/corepack" pnpm --version
+          "$NODE22_BIN/npm" config set registry https://registry.npmjs.org
+      - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm --filter @open-design/web test tests/w3kits-daemon-shim.test.ts
+      - run: corepack pnpm build
       - name: Verify package version
         run: |
           set -euo pipefail
