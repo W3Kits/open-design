@@ -1,5 +1,5 @@
 import { createPersistentBrowserWorkspace, type BrowserWorkspace, type WorkspaceEntry } from '@open-design/browser-vfs';
-import { runtimeDelete, runtimeList, runtimeRead, runtimeWrite, type W3KitsRuntimeListEntry } from './bridge';
+import { runtimeDelete, runtimeList, runtimeRead, runtimeSync, runtimeWrite, type W3KitsRuntimeListEntry } from './bridge';
 
 const WORKSPACE_NAMESPACE = 'opendesign-w3kits-web-mode-v1';
 const workspacePromise = createPersistentBrowserWorkspace({ namespace: WORKSPACE_NAMESPACE });
@@ -77,6 +77,9 @@ export async function syncWorkspaceToCore(): Promise<{ uploaded: number; deleted
       errors.push({ path, error: error instanceof Error ? error.message : 'upload_failed' });
     }
   }
-  if (errors.length === 0) workspace.markClean();
-  return { uploaded, deleted: 0, retained: errors.length, unauthenticated: false, errors };
+  if (errors.length > 0) return { uploaded, deleted: 0, retained: errors.length, unauthenticated: false, errors };
+
+  const syncResult = await runtimeSync();
+  if (!syncResult.unauthenticated && syncResult.errors.length === 0) workspace.markClean();
+  return { ...syncResult, uploaded: uploaded + syncResult.uploaded };
 }

@@ -12,6 +12,7 @@ interface RuntimeFile {
 function installRuntimeBridge(files = new Map<string, RuntimeFile>()) {
   delete (window as typeof window & { __w3kitsBridgeListenerInstalled?: boolean }).__w3kitsBridgeListenerInstalled;
   const listeners: Array<(event: MessageEvent) => void> = [];
+  let syncCalls = 0;
   const parent = {
     postMessage(message: { type: string; requestId: string; path?: string; bodyBase64?: string; contentType?: string }, _targetOrigin: string) {
       const encoder = new TextEncoder();
@@ -48,7 +49,8 @@ function installRuntimeBridge(files = new Map<string, RuntimeFile>()) {
         return;
       }
       if (message.type === 'W3KITS_RUNTIME_FS_SYNC') {
-        respond({ uploaded: 0, deleted: 0, retained: 0, unauthenticated: false, errors: [] });
+        syncCalls += 1;
+        respond({ uploaded: 0, deleted: 0, retained: 0, unauthenticated: false, errors: [], syncCalls });
       }
     },
   };
@@ -58,7 +60,7 @@ function installRuntimeBridge(files = new Map<string, RuntimeFile>()) {
     if (type === 'message' && typeof listener === 'function') listeners.push(listener as (event: MessageEvent) => void);
     return originalAddEventListener(type, listener, options);
   });
-  return files;
+  return { files, getSyncCalls: () => syncCalls };
 }
 
 describe('W3Kits OpenDesign adapter', () => {
@@ -78,7 +80,7 @@ describe('W3Kits OpenDesign adapter', () => {
   });
 
   it('handles project create locally and syncs dirty files through the W3Kits runtime VFS bridge', async () => {
-    const files = installRuntimeBridge();
+    const bridge = installRuntimeBridge();
     vi.stubGlobal('fetch', vi.fn(async () => new Response('fallback', { status: 599 })));
     const { handleW3KitsDaemonRequest } = await import('../src/w3kits/daemon-shim');
 
@@ -91,7 +93,7 @@ describe('W3Kits OpenDesign adapter', () => {
     expect(createResponse.status).toBe(200);
     const created = await createResponse.json() as { project: { id: string; name: string } };
     expect(created.project).toMatchObject({ id: 'p_1', name: 'Landing' });
-    expect(files.get('/workspace/projects/p_1/files/DESIGN.md')).toBeUndefined();
+    expect(bridge.files.get('/workspace/projects/p_1/files/DESIGN.md')).toBeUndefined();
 
     const rawResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects/p_1/raw/DESIGN.md'));
     expect(await rawResponse.text()).toBe('# Landing\n');
@@ -103,7 +105,8 @@ describe('W3Kits OpenDesign adapter', () => {
     const syncResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/w3kits/sync', { method: 'POST' }));
     expect(syncResponse.status).toBe(200);
     expect(await syncResponse.json()).toMatchObject({ uploaded: 3, errors: [] });
-    expect(files.get('/workspace/projects/p_1/files/DESIGN.md')?.body).toBe('# Landing\n');
+    expect(bridge.getSyncCalls()).toBe(1);
+    expect(bridge.files.get('/workspace/projects/p_1/files/DESIGN.md')?.body).toBe('# Landing\n');
   });
 
   it('serves project artifacts from the browser VFS workspace', async () => {
