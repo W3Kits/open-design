@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { installW3KitsOpenDesignAdapter } from '../../src/w3kits/init';
 
 // The product is a fully client-driven SPA — every component reads
 // localStorage, window.location, etc. — so we opt out of static-time
@@ -13,5 +14,6 @@ const App = dynamic(() => import('../../src/App').then((m) => m.App), {
 });
 
 export function ClientApp() {
+  installW3KitsOpenDesignAdapter();
   return <App />;
 }
