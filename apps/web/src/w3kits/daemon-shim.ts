@@ -8,6 +8,21 @@ const DEFAULT_PROJECT_DIR = '/workspace/projects';
 const EMPTY_SKILLS: SkillSummary[] = [];
 const W3KITS_OPENAI_BASE_URL = 'https://w3kits.com/api/ai/openai/v1';
 const W3KITS_PLUGIN_ID = 'opendesign';
+const W3KITS_RUNTIME_SESSION_REQUEST = 'W3KITS_RUNTIME_SESSION_REQUEST';
+const W3KITS_RESPONSE = 'W3KITS_RESPONSE';
+
+interface W3KitsRuntimeSession {
+  token: string;
+  expiresIn: number;
+  pluginId: string;
+  pluginVersion: string;
+  packageName?: string;
+  packageIntegrity?: string;
+  runtimeSessionHeader: string;
+  identityHeaders?: Record<string, string | undefined>;
+}
+
+let cachedRuntimeSession: { value: W3KitsRuntimeSession; expiresAt: number } | null = null;
 
 type JsonValue = Record<string, unknown> | unknown[] | string | number | boolean | null;
 
@@ -33,12 +48,72 @@ function textResponse(payload: string, status = 200, contentType = 'text/plain;c
   return new Response(payload, { status, headers: { 'content-type': contentType } });
 }
 
+function parentOrigin(): string {
+  try {
+    return new URL(W3KITS_OPENAI_BASE_URL).origin;
+  } catch {
+    return 'https://w3kits.com';
+  }
+}
+
 function notifyAuthRequired(): void {
   try {
-    window.parent?.postMessage({ type: 'W3KITS_AUTH_REQUIRED', version: 1, pluginId: W3KITS_PLUGIN_ID, reason: 'ai_request' }, '*');
+    window.parent?.postMessage({ type: 'W3KITS_AUTH_REQUIRED', version: 1, pluginId: W3KITS_PLUGIN_ID, reason: 'ai_request' }, parentOrigin());
   } catch {
     // Best-effort signal to the outer W3Kits shell.
   }
+}
+
+function bridgeRequest<T>(message: Record<string, unknown>, timeoutMs = 10000): Promise<T> {
+  if (typeof window === 'undefined' || window.parent === window) return Promise.reject(new Error('W3Kits runtime bridge is unavailable.'));
+  const requestId = 'opendesign-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  const targetOrigin = parentOrigin();
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', onMessage);
+      reject(new Error('W3Kits runtime bridge timed out.'));
+    }, timeoutMs);
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== window.parent) return;
+      if (event.origin !== targetOrigin) return;
+      const data = event.data as { type?: unknown; requestId?: unknown; ok?: unknown; data?: unknown; error?: { code?: unknown; message?: unknown } };
+      if (data?.type !== W3KITS_RESPONSE || data.requestId !== requestId) return;
+      window.clearTimeout(timeout);
+      window.removeEventListener('message', onMessage);
+      if (data.ok) resolve(data.data as T);
+      else reject(new Error(typeof data.error?.message === 'string' ? data.error.message : typeof data.error?.code === 'string' ? data.error.code : 'W3Kits runtime bridge failed.'));
+    };
+    window.addEventListener('message', onMessage);
+    window.parent.postMessage({ ...message, version: 1, requestId }, targetOrigin);
+  });
+}
+
+async function getRuntimeSession(): Promise<W3KitsRuntimeSession> {
+  const now = Date.now();
+  if (cachedRuntimeSession && cachedRuntimeSession.expiresAt - now > 30000) return cachedRuntimeSession.value;
+  const value = await bridgeRequest<W3KitsRuntimeSession>({
+    type: W3KITS_RUNTIME_SESSION_REQUEST,
+    pluginId: W3KITS_PLUGIN_ID,
+    origin: window.location.origin,
+  });
+  cachedRuntimeSession = { value, expiresAt: now + Math.max(30, value.expiresIn - 30) * 1000 };
+  return value;
+}
+
+async function w3kitsOpenAiHeaders(): Promise<Record<string, string>> {
+  const session = await getRuntimeSession();
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-w3kits-runtime-session': session.token,
+    'x-w3kits-plugin-id': session.pluginId || W3KITS_PLUGIN_ID,
+    'x-w3kits-plugin-version': session.pluginVersion,
+  };
+  for (const [key, value] of Object.entries(session.identityHeaders || {})) {
+    if (typeof value === 'string' && value) headers[key] = value;
+  }
+  if (session.packageName) headers['x-w3kits-plugin-package'] = session.packageName;
+  if (session.packageIntegrity) headers['x-w3kits-plugin-integrity'] = session.packageIntegrity;
+  return headers;
 }
 
 function sseFrame(event: string, data: JsonValue): string {
@@ -208,11 +283,7 @@ async function handleOpenAiProxy(request: Request): Promise<Response> {
   const upstream = await fetch(baseUrl + '/chat/completions', {
     method: 'POST',
     credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-      authorization: 'Bearer ' + (body.apiKey || 'w3kits-plugin-user'),
-      'x-w3kits-plugin-id': W3KITS_PLUGIN_ID,
-    },
+    headers: await w3kitsOpenAiHeaders(),
     body: JSON.stringify({
       model: body.model || 'gpt-4o-mini',
       messages,

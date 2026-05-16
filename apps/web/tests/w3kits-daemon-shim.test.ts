@@ -9,27 +9,46 @@ interface RuntimeFile {
   contentType?: string;
 }
 
-function installRuntimeBridge(files = new Map<string, RuntimeFile>()) {
+function installRuntimeBridge(files = new Map<string, RuntimeFile>(), parentMessages: unknown[] = []) {
   delete (window as typeof window & { __w3kitsBridgeListenerInstalled?: boolean }).__w3kitsBridgeListenerInstalled;
   const listeners: Array<(event: MessageEvent) => void> = [];
   let syncCalls = 0;
   const parent = {
     postMessage(message: { type: string; requestId: string; path?: string; bodyBase64?: string; contentType?: string }, _targetOrigin: string) {
+      parentMessages.push(message);
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
       const respond = (data: unknown, ok = true) => {
         queueMicrotask(() => {
           for (const listener of listeners) {
-            listener({ data: { type: 'W3KITS_RESPONSE', version: 1, requestId: message.requestId, ok, data } } as MessageEvent);
+            listener({ origin: 'https://w3kits.com', source: parent, data: { type: 'W3KITS_RESPONSE', version: 1, requestId: message.requestId, ok, data } } as unknown as MessageEvent);
           }
         });
       };
+      if (message.type === 'W3KITS_RUNTIME_SESSION_REQUEST') {
+        respond({
+          token: 'runtime-token',
+          expiresIn: 900,
+          pluginId: 'opendesign',
+          pluginVersion: '0.1.0',
+          packageName: '@w3kits/plugin-opendesign',
+          packageIntegrity: 'sha512-opendesign',
+          runtimeSessionHeader: 'x-w3kits-runtime-session',
+          identityHeaders: {
+            'x-w3kits-plugin-id': 'opendesign',
+            'x-w3kits-plugin-version': '0.1.0',
+            'x-w3kits-plugin-package': '@w3kits/plugin-opendesign',
+            'x-w3kits-plugin-integrity': 'sha512-opendesign',
+          },
+        });
+        return;
+      }
       if (message.type === 'W3KITS_RUNTIME_FS_READ') {
         const file = files.get(message.path || '');
         if (!file) {
           queueMicrotask(() => {
             for (const listener of listeners) {
-              listener({ data: { type: 'W3KITS_RESPONSE', version: 1, requestId: message.requestId, ok: false, error: { code: 'not_found', message: 'Runtime file was not found.' } } } as MessageEvent);
+              listener({ origin: 'https://w3kits.com', source: parent, data: { type: 'W3KITS_RESPONSE', version: 1, requestId: message.requestId, ok: false, error: { code: 'not_found', message: 'Runtime file was not found.' } } } as unknown as MessageEvent);
             }
           });
           return;
@@ -165,7 +184,7 @@ describe('W3Kits OpenDesign adapter', () => {
 
   it('proxies OpenAI-compatible streaming through W3Kits and signals auth when needed', async () => {
     const parentMessages: unknown[] = [];
-    Object.defineProperty(window, 'parent', { value: { postMessage: (message: unknown) => parentMessages.push(message) }, configurable: true });
+    installRuntimeBridge(new Map(), parentMessages);
     const fetchMock = vi.fn(async () => new Response('login required', { status: 401 }));
     vi.stubGlobal('fetch', fetchMock);
     const { handleW3KitsDaemonRequest } = await import('../src/w3kits/daemon-shim');
@@ -178,7 +197,13 @@ describe('W3Kits OpenDesign adapter', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('https://w3kits.com/api/ai/openai/v1/chat/completions', expect.objectContaining({
       credentials: 'include',
-      headers: expect.objectContaining({ 'x-w3kits-plugin-id': 'opendesign' }),
+      headers: expect.objectContaining({
+        'x-w3kits-runtime-session': 'runtime-token',
+        'x-w3kits-plugin-id': 'opendesign',
+        'x-w3kits-plugin-version': '0.1.0',
+        'x-w3kits-plugin-package': '@w3kits/plugin-opendesign',
+        'x-w3kits-plugin-integrity': 'sha512-opendesign',
+      }),
     }));
     expect(await readText(response)).toContain('event: error');
     expect(parentMessages).toContainEqual(expect.objectContaining({ type: 'W3KITS_AUTH_REQUIRED', reason: 'ai_request', pluginId: 'opendesign' }));
