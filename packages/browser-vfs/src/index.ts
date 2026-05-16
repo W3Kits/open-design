@@ -73,6 +73,22 @@ export interface BrowserWorkspace {
   importSnapshot(data: Uint8Array | string, options?: { markDirty?: boolean }): Promise<void>;
 }
 
+export interface PersistentWorkspaceOptions {
+  namespace?: string;
+  globalScope?: Pick<typeof globalThis, "indexedDB" | "navigator">;
+}
+
+interface FileSystemFileHandleLike {
+  createWritable(): Promise<{ write(data: Uint8Array): Promise<void> | void; close(): Promise<void> | void }>;
+  getFile(): Promise<{ arrayBuffer(): Promise<ArrayBuffer> }>;
+}
+
+interface FileSystemDirectoryHandleLike {
+  getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FileSystemDirectoryHandleLike>;
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandleLike>;
+  removeEntry?(name: string, options?: { recursive?: boolean }): Promise<void>;
+}
+
 function splitPath(path: string): string[] {
   return path.split("/").filter(Boolean);
 }
@@ -128,6 +144,20 @@ function base64ToBytes(data: string): Uint8Array {
   return bytes;
 }
 
+function fileStat(path: string, data: Uint8Array, options: WorkspaceWriteOptions = {}): Promise<WorkspaceFileStat> {
+  return sha256Hex(data).then((etag) => {
+    const updatedAt = new Date().toISOString();
+    return {
+      path,
+      size: data.byteLength,
+      etag,
+      revision: updatedAt + "-" + etag.slice(0, 12),
+      updatedAt,
+      ...(options.contentType ? { contentType: options.contentType } : {}),
+    };
+  });
+}
+
 function directoryEntriesFor(files: WorkspaceFileEntry[], prefix: string): WorkspaceDirectoryEntry[] {
   const directories = new Set<string>();
   const root = prefix === "/" ? "/" : prefix.replace(/\/$/, "");
@@ -157,16 +187,7 @@ export class MemoryWorkspaceBackend implements BrowserWorkspaceBackend {
     const normalized = normalizeWorkspacePath(path);
     if (normalized === "/") throw new BrowserVfsError("invalid_path", "Workspace file path must not be root");
     const body = new Uint8Array(data);
-    const etag = await sha256Hex(body);
-    const updatedAt = new Date().toISOString();
-    const metadata: WorkspaceFileStat = {
-      path: normalized,
-      size: body.byteLength,
-      etag,
-      revision: updatedAt + "-" + etag.slice(0, 12),
-      updatedAt,
-      ...(options.contentType ? { contentType: options.contentType } : {}),
-    };
+    const metadata = await fileStat(normalized, body, options);
     this.files.set(normalized, { body, metadata });
     return metadata;
   }
@@ -189,6 +210,222 @@ export class MemoryWorkspaceBackend implements BrowserWorkspaceBackend {
   async clear(): Promise<void> {
     this.files.clear();
   }
+}
+
+export class OpfsWorkspaceBackend implements BrowserWorkspaceBackend {
+  private index: Map<string, WorkspaceFileStat> | null = null;
+
+  private constructor(private readonly root: FileSystemDirectoryHandleLike) {}
+
+  static async create(options: PersistentWorkspaceOptions = {}): Promise<OpfsWorkspaceBackend> {
+    const scope = options.globalScope ?? globalThis;
+    const getDirectory = scope.navigator?.storage?.getDirectory;
+    if (typeof getDirectory !== "function") throw new BrowserVfsError("opfs_unavailable", "OPFS is not available");
+    const storageRoot = await getDirectory.call(scope.navigator.storage) as FileSystemDirectoryHandleLike;
+    const namespaceRoot = await storageRoot.getDirectoryHandle(options.namespace ?? "default", { create: true });
+    return new OpfsWorkspaceBackend(namespaceRoot);
+  }
+
+  private async filesDirectory(): Promise<FileSystemDirectoryHandleLike> {
+    return this.root.getDirectoryHandle("files", { create: true });
+  }
+
+  private async readIndex(): Promise<Map<string, WorkspaceFileStat>> {
+    if (this.index) return this.index;
+    try {
+      const handle = await this.root.getFileHandle("index.json");
+      const file = await handle.getFile();
+      const json = TEXT_DECODER.decode(await file.arrayBuffer());
+      const records = JSON.parse(json) as WorkspaceFileStat[];
+      this.index = new Map(records.map((record) => [record.path, record]));
+    } catch {
+      this.index = new Map();
+    }
+    return this.index;
+  }
+
+  private async writeIndex(): Promise<void> {
+    const index = await this.readIndex();
+    const handle = await this.root.getFileHandle("index.json", { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(TEXT_ENCODER.encode(JSON.stringify(Array.from(index.values()).sort((a, b) => a.path.localeCompare(b.path)))));
+    await writable.close();
+  }
+
+  private fileName(path: string): string {
+    return encodeURIComponent(path);
+  }
+
+  async stat(path: string): Promise<WorkspaceFileStat | null> {
+    return (await this.readIndex()).get(normalizeWorkspacePath(path)) ?? null;
+  }
+
+  async readFile(path: string): Promise<Uint8Array | null> {
+    const normalized = normalizeWorkspacePath(path);
+    if (!(await this.readIndex()).has(normalized)) return null;
+    try {
+      const handle = await (await this.filesDirectory()).getFileHandle(this.fileName(normalized));
+      const file = await handle.getFile();
+      return new Uint8Array(await file.arrayBuffer());
+    } catch {
+      return null;
+    }
+  }
+
+  async writeFile(path: string, data: Uint8Array, options: WorkspaceWriteOptions = {}): Promise<WorkspaceFileStat> {
+    const normalized = normalizeWorkspacePath(path);
+    if (normalized === "/") throw new BrowserVfsError("invalid_path", "Workspace file path must not be root");
+    const body = new Uint8Array(data);
+    const metadata = await fileStat(normalized, body, options);
+    const handle = await (await this.filesDirectory()).getFileHandle(this.fileName(normalized), { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(body);
+    await writable.close();
+    (await this.readIndex()).set(normalized, metadata);
+    await this.writeIndex();
+    return metadata;
+  }
+
+  async deleteFile(path: string): Promise<boolean> {
+    const normalized = normalizeWorkspacePath(path);
+    const index = await this.readIndex();
+    const existed = index.delete(normalized);
+    if (!existed) return false;
+    await (await this.filesDirectory()).removeEntry?.(this.fileName(normalized));
+    await this.writeIndex();
+    return true;
+  }
+
+  async listFiles(prefix = "/"): Promise<WorkspaceEntry[]> {
+    const normalized = normalizeWorkspacePath(prefix);
+    const files = Array.from((await this.readIndex()).values(), (file): WorkspaceFileEntry => ({ ...file, kind: "file" }));
+    const directFiles = files.filter((file) => {
+      if (!pathWithinPrefix(file.path, normalized)) return false;
+      const relative = normalized === "/" ? file.path.slice(1) : file.path.slice(normalized.length + 1);
+      return relative.length > 0 && !relative.includes("/");
+    });
+    return [...directoryEntriesFor(files, normalized), ...directFiles].sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  async clear(): Promise<void> {
+    const paths = Array.from((await this.readIndex()).keys());
+    for (const path of paths) await (await this.filesDirectory()).removeEntry?.(this.fileName(path));
+    this.index = new Map();
+    await this.writeIndex();
+  }
+}
+
+type IndexedDbRecord = { path: string; body: ArrayBuffer; metadata: WorkspaceFileStat };
+
+function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new BrowserVfsError("indexeddb_error", "IndexedDB request failed"));
+  });
+}
+
+function transactionDone(transaction: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(transaction.error ?? new BrowserVfsError("indexeddb_aborted", "IndexedDB transaction aborted"));
+    transaction.onerror = () => reject(transaction.error ?? new BrowserVfsError("indexeddb_error", "IndexedDB transaction failed"));
+  });
+}
+
+export class IndexedDbWorkspaceBackend implements BrowserWorkspaceBackend {
+  private constructor(private readonly db: IDBDatabase) {}
+
+  static async create(options: PersistentWorkspaceOptions = {}): Promise<IndexedDbWorkspaceBackend> {
+    const scope = options.globalScope ?? globalThis;
+    const indexedDB = scope.indexedDB;
+    if (typeof indexedDB?.open !== "function") throw new BrowserVfsError("indexeddb_unavailable", "IndexedDB is not available");
+    const request = indexedDB.open("w3kits-browser-vfs:" + (options.namespace ?? "default"), 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains("files")) db.createObjectStore("files", { keyPath: "path" });
+    };
+    return new IndexedDbWorkspaceBackend(await requestResult(request));
+  }
+
+  private store(mode: IDBTransactionMode): { store: IDBObjectStore; done: Promise<void> } {
+    const transaction = this.db.transaction("files", mode);
+    return { store: transaction.objectStore("files"), done: transactionDone(transaction) };
+  }
+
+  async stat(path: string): Promise<WorkspaceFileStat | null> {
+    const { store } = this.store("readonly");
+    const record = await requestResult(store.get(normalizeWorkspacePath(path))) as IndexedDbRecord | undefined;
+    return record?.metadata ?? null;
+  }
+
+  async readFile(path: string): Promise<Uint8Array | null> {
+    const { store } = this.store("readonly");
+    const record = await requestResult(store.get(normalizeWorkspacePath(path))) as IndexedDbRecord | undefined;
+    return record ? new Uint8Array(record.body) : null;
+  }
+
+  async writeFile(path: string, data: Uint8Array, options: WorkspaceWriteOptions = {}): Promise<WorkspaceFileStat> {
+    const normalized = normalizeWorkspacePath(path);
+    if (normalized === "/") throw new BrowserVfsError("invalid_path", "Workspace file path must not be root");
+    const body = new Uint8Array(data);
+    const metadata = await fileStat(normalized, body, options);
+    const { store, done } = this.store("readwrite");
+    const buffer = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength);
+    await requestResult(store.put({ path: normalized, body: buffer, metadata } satisfies IndexedDbRecord));
+    await done;
+    return metadata;
+  }
+
+  async deleteFile(path: string): Promise<boolean> {
+    const normalized = normalizeWorkspacePath(path);
+    const existing = await this.stat(normalized);
+    if (!existing) return false;
+    const { store, done } = this.store("readwrite");
+    await requestResult(store.delete(normalized));
+    await done;
+    return true;
+  }
+
+  async listFiles(prefix = "/"): Promise<WorkspaceEntry[]> {
+    const normalized = normalizeWorkspacePath(prefix);
+    const { store } = this.store("readonly");
+    const records = await requestResult(store.getAll()) as IndexedDbRecord[];
+    const files = records.map((record): WorkspaceFileEntry => ({ ...record.metadata, kind: "file" }));
+    const directFiles = files.filter((file) => {
+      if (!pathWithinPrefix(file.path, normalized)) return false;
+      const relative = normalized === "/" ? file.path.slice(1) : file.path.slice(normalized.length + 1);
+      return relative.length > 0 && !relative.includes("/");
+    });
+    return [...directoryEntriesFor(files, normalized), ...directFiles].sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  async clear(): Promise<void> {
+    const { store, done } = this.store("readwrite");
+    await requestResult(store.clear());
+    await done;
+  }
+}
+
+export async function createPersistentBrowserWorkspaceBackend(options: PersistentWorkspaceOptions = {}): Promise<BrowserWorkspaceBackend> {
+  if (isOpfsAvailable(options.globalScope ?? globalThis)) {
+    try {
+      return await OpfsWorkspaceBackend.create(options);
+    } catch {
+      // Fall through to IndexedDB when OPFS exists but is unavailable for this context.
+    }
+  }
+  if (isIndexedDbAvailable(options.globalScope ?? globalThis)) {
+    try {
+      return await IndexedDbWorkspaceBackend.create(options);
+    } catch {
+      // Fall through to memory so the plugin can keep an anonymous draft alive.
+    }
+  }
+  return new MemoryWorkspaceBackend();
+}
+
+export async function createPersistentBrowserWorkspace(options: PersistentWorkspaceOptions = {}): Promise<BrowserWorkspace> {
+  return createBrowserWorkspace(await createPersistentBrowserWorkspaceBackend(options));
 }
 
 export function createBrowserWorkspace(backend: BrowserWorkspaceBackend = new MemoryWorkspaceBackend()): BrowserWorkspace {
