@@ -131,6 +131,27 @@ describe('W3Kits OpenDesign adapter', () => {
     expect(escaped.status).toBe(404);
   });
 
+  it('reloads projects and artifacts from the W3Kits runtime VFS bridge', async () => {
+    const now = Date.now();
+    installRuntimeBridge(new Map<string, RuntimeFile>([
+      ['/workspace/projects/index.json', { body: JSON.stringify([{ id: 'p_remote', name: 'Remote project', createdAt: now, updatedAt: now, skillId: null, designSystemId: null }]), contentType: 'application/json' }],
+      ['/workspace/projects/p_remote/files/DESIGN.md', { body: '# Remote project\n', contentType: 'text/markdown;charset=utf-8' }],
+      ['/workspace/projects/p_remote/files/.od/artifacts/remote/index.html', { body: '<main>Remote artifact</main>', contentType: 'text/html;charset=utf-8' }],
+    ]));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('fallback', { status: 599 })));
+    const { handleW3KitsDaemonRequest } = await import('../src/w3kits/daemon-shim');
+
+    const projectsResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects'));
+    expect(await projectsResponse.json()).toEqual({ projects: [{ id: 'p_remote', name: 'Remote project', createdAt: now, updatedAt: now, skillId: null, designSystemId: null }] });
+
+    const rawResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects/p_remote/raw/DESIGN.md'));
+    expect(await rawResponse.text()).toBe('# Remote project\n');
+
+    const artifactResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/artifacts/p_remote/remote/index.html'));
+    expect(artifactResponse.status).toBe(200);
+    expect(await artifactResponse.text()).toBe('<main>Remote artifact</main>');
+  });
+
   it('ships the plugin-scoped Service Worker daemon relay asset', () => {
     const source = readFileSync(join(process.cwd(), 'public/w3kits-daemon-sw.js'), 'utf8');
 
