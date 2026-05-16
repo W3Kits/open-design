@@ -10,6 +10,7 @@ interface RuntimeFile {
 }
 
 function installRuntimeBridge(files = new Map<string, RuntimeFile>()) {
+  delete (window as typeof window & { __w3kitsBridgeListenerInstalled?: boolean }).__w3kitsBridgeListenerInstalled;
   const listeners: Array<(event: MessageEvent) => void> = [];
   const parent = {
     postMessage(message: { type: string; requestId: string; path?: string; bodyBase64?: string; contentType?: string }, _targetOrigin: string) {
@@ -62,6 +63,7 @@ function installRuntimeBridge(files = new Map<string, RuntimeFile>()) {
 
 describe('W3Kits OpenDesign adapter', () => {
   afterEach(() => {
+    delete (window as typeof window & { __w3kitsBridgeListenerInstalled?: boolean }).__w3kitsBridgeListenerInstalled;
     vi.restoreAllMocks();
     vi.resetModules();
     vi.unstubAllGlobals();
@@ -102,6 +104,31 @@ describe('W3Kits OpenDesign adapter', () => {
     expect(syncResponse.status).toBe(200);
     expect(await syncResponse.json()).toMatchObject({ uploaded: 3, errors: [] });
     expect(files.get('/workspace/projects/p_1/files/DESIGN.md')?.body).toBe('# Landing\n');
+  });
+
+  it('serves project artifacts from the browser VFS workspace', async () => {
+    installRuntimeBridge();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('fallback', { status: 599 })));
+    const { handleW3KitsDaemonRequest } = await import('../src/w3kits/daemon-shim');
+
+    await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: 'p_artifact', name: 'Artifact project' }),
+    }));
+    await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects/p_artifact/files', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ path: '.od/artifacts/a/index.html', content: '<main>Artifact</main>' }),
+    }));
+
+    const response = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/artifacts/p_artifact/a/index.html'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(await response.text()).toBe('<main>Artifact</main>');
+
+    const escaped = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/artifacts/p_artifact/../index.html'));
+    expect(escaped.status).toBe(404);
   });
 
   it('ships the plugin-scoped Service Worker daemon relay asset', () => {

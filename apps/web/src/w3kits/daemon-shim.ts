@@ -1,5 +1,5 @@
 import { isW3KitsRuntimeAvailable } from './bridge';
-import { listWorkspaceFiles, readWorkspaceText, syncWorkspaceToCore, writeWorkspaceFile } from './workspace';
+import { listWorkspaceFiles, readWorkspaceFile, readWorkspaceText, syncWorkspaceToCore, writeWorkspaceFile } from './workspace';
 import type { Project, SkillSummary } from '../types';
 import { randomUUID } from '../utils/uuid';
 
@@ -81,6 +81,13 @@ function filePath(projectId: string, path: string): string {
   return projectDir(projectId) + '/files/' + clean;
 }
 
+function safeRelativePath(path: string): string | null {
+  if (!path || path.includes('\\') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(path)) return null;
+  const segments = path.split('/');
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) return null;
+  return segments.join('/');
+}
+
 async function listProjectIndex(): Promise<ProjectIndexEntry[]> {
   return readJson<ProjectIndexEntry[]>(PROJECTS_INDEX, []);
 }
@@ -145,10 +152,42 @@ async function handleProjects(request: Request, url: URL): Promise<Response> {
 
 function contentTypeFor(path: string): string {
   if (path.endsWith('.html')) return 'text/html;charset=utf-8';
+  if (path.endsWith('.css')) return 'text/css;charset=utf-8';
+  if (path.endsWith('.js') || path.endsWith('.mjs')) return 'application/javascript;charset=utf-8';
   if (path.endsWith('.json')) return 'application/json';
   if (path.endsWith('.md')) return 'text/markdown;charset=utf-8';
   if (path.endsWith('.svg')) return 'image/svg+xml';
+  if (path.endsWith('.png')) return 'image/png';
+  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
+  if (path.endsWith('.webp')) return 'image/webp';
   return 'text/plain;charset=utf-8';
+}
+
+async function handleArtifacts(request: Request, url: URL): Promise<Response> {
+  if (request.method !== 'GET') return jsonResponse({ error: 'method_not_allowed' }, 405);
+  const parts = url.pathname.split('/').filter(Boolean);
+  const projectId = parts[1];
+  let artifactPath: string;
+  try {
+    artifactPath = decodeURIComponent(parts.slice(2).join('/'));
+  } catch {
+    return textResponse('Not found', 404);
+  }
+  artifactPath = safeRelativePath(artifactPath) ?? '';
+  if (!projectId || !artifactPath) return textResponse('Not found', 404);
+
+  const candidates = [
+    filePath(projectId, '.od/artifacts/' + artifactPath),
+    projectDir(projectId) + '/.od/artifacts/' + artifactPath,
+    filePath(projectId, artifactPath),
+  ];
+  for (const path of candidates) {
+    const body = await readWorkspaceFile(path);
+    if (!body) continue;
+    const payload = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer;
+    return new Response(payload, { status: 200, headers: { 'content-type': contentTypeFor(artifactPath) } });
+  }
+  return textResponse('Not found', 404);
 }
 
 async function handleOpenAiProxy(request: Request): Promise<Response> {
@@ -242,7 +281,7 @@ export async function handleW3KitsDaemonRequest(request: Request): Promise<Respo
   if (url.pathname === '/api/proxy/openai/stream') return handleOpenAiProxy(request);
   if (url.pathname === '/api/w3kits/sync' && request.method === 'POST') return jsonResponse(await syncWorkspaceToCore() as unknown as JsonValue);
   if (url.pathname.startsWith('/api/projects')) return handleProjects(request, url);
-  if (url.pathname.startsWith('/artifacts/')) return textResponse('Artifact rendering is not available yet in W3Kits Web Mode.', 404);
+  if (url.pathname.startsWith('/artifacts/')) return handleArtifacts(request, url);
   return fetch(request);
 }
 
