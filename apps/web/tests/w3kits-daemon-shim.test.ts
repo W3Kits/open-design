@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildW3KitsDefaultConfig } from '../src/w3kits/init';
 
@@ -92,6 +94,14 @@ describe('W3Kits OpenDesign adapter', () => {
     const listResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects'));
     const listed = await listResponse.json() as { projects: Array<{ id: string; name: string }> };
     expect(listed.projects).toEqual([{ id: 'p_1', name: 'Landing', createdAt: expect.any(Number), updatedAt: expect.any(Number), skillId: null, designSystemId: null }]);
+  });
+
+  it('ships the plugin-scoped Service Worker daemon relay asset', () => {
+    const source = readFileSync(join(process.cwd(), 'public/w3kits-daemon-sw.js'), 'utf8');
+
+    expect(source).toContain('W3KITS_DAEMON_REQUEST');
+    expect(source).toContain("url.pathname.startsWith('/api/')");
+    expect(source).toContain("url.pathname.startsWith('/artifacts/')");
   });
 
   it('proxies OpenAI-compatible streaming through W3Kits and signals auth when needed', async () => {
