@@ -132,6 +132,7 @@ jobs:
       # app build, even when a developer only needs packages/tools.
       #
       # Fresh CI typecheck/test still need these specific generated declarations:
+      #   - `packages/browser-vfs/dist/*.d.ts` for W3Kits web-mode adapter imports
       #   - `apps/daemon/dist/*.d.ts` for packaged/runtime consumers of the daemon
       #     package export
       #   - `apps/desktop/dist/main/index.d.ts` for `apps/packaged` imports of
@@ -142,6 +143,7 @@ jobs:
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
         run: |
+          pnpm --filter @open-design/browser-vfs build
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
