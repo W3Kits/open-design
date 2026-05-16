@@ -204,6 +204,214 @@ function listDesignSystemCatalog() {
   return out;
 }
 
+function copyRequiredDir(sourceRelative, targetRelative) {
+  const source = path.join(root, sourceRelative);
+  if (!fs.existsSync(source)) throw new Error('Missing required runtime directory: ' + sourceRelative);
+  const target = path.join(dist, targetRelative);
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.cpSync(source, target, { recursive: true });
+}
+
+function copyRequiredFile(sourceRelative, targetRelative) {
+  const source = path.join(root, sourceRelative);
+  if (!fs.existsSync(source)) throw new Error('Missing required runtime file: ' + sourceRelative);
+  const target = path.join(dist, targetRelative);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.copyFileSync(source, target);
+}
+
+function readPackageJson(relativePath) {
+  return JSON.parse(fs.readFileSync(path.join(root, relativePath, 'package.json'), 'utf8'));
+}
+
+function writeJsonFile(targetRelative, data) {
+  const target = path.join(dist, targetRelative);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, JSON.stringify(data, null, 2) + '\n');
+}
+
+function workspaceRuntimePackageJson(packagePath) {
+  const packageJson = readPackageJson(packagePath);
+  return {
+    name: packageJson.name,
+    version: packageJson.version,
+    type: packageJson.type,
+    main: packageJson.main,
+    exports: packageJson.exports,
+  };
+}
+
+function writeOpenDesignWebContainerLauncher() {
+  const source = `const DEFAULT_RUNTIME_MANIFEST_PATH = "__w3kits/webcontainer-runtime.json";
+const DEFAULT_SERVICE_WORKER_URL = "__w3kits/daemon-proxy-sw.js";
+const DEFAULT_SERVICE_WORKER_SCOPE = "/";
+const DEFAULT_DAEMON_PORT = 7456;
+
+export const w3kitsOpenDesignDaemon = {
+  pluginId: "opendesign",
+  mode: "upstream-daemon-webcontainer",
+  runtimeManifest: DEFAULT_RUNTIME_MANIFEST_PATH,
+  serviceWorker: DEFAULT_SERVICE_WORKER_URL,
+  daemonEntry: "__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js",
+  startCommand: ["node", "__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js", "--host", "0.0.0.0", "--port", "7456", "--no-open"],
+  healthPath: "/api/health",
+  proxiedPaths: ["/api/*", "/artifacts/*"],
+  unsupportedErrorCode: "unsupported_in_w3kits_webcontainer_v1",
+};
+
+function assertCrossOriginIsolated() {
+  if (typeof globalThis.crossOriginIsolated !== "undefined" && !globalThis.crossOriginIsolated) {
+    throw new Error("w3kits_webcontainer_requires_cross_origin_isolation");
+  }
+}
+
+function packageAssetUrl(relativePath, options = {}) {
+  if (options.assetUrl) return options.assetUrl(relativePath);
+  if (options.runtimeBaseUrl) return new URL(relativePath, options.runtimeBaseUrl).toString();
+  return relativePath;
+}
+
+async function loadRuntimeManifest(manifestPath = DEFAULT_RUNTIME_MANIFEST_PATH, options = {}) {
+  const response = await fetch(packageAssetUrl(manifestPath, options), { cache: "force-cache" });
+  if (!response.ok) throw new Error("w3kits_webcontainer_manifest_unavailable");
+  return response.json();
+}
+
+async function waitForServerReady(webcontainer, expectedPort, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("w3kits_opendesign_daemon_start_timeout")), timeoutMs);
+    const dispose = webcontainer.on("server-ready", (port, url) => {
+      if (port !== expectedPort) return;
+      clearTimeout(timeout);
+      dispose?.();
+      resolve(url);
+    });
+  });
+}
+
+async function waitForHealth(daemonUrl, healthPath, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(new URL(healthPath, daemonUrl), { cache: "no-store" });
+      if (response.ok) return;
+      lastError = new Error("health_status_" + response.status);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw lastError instanceof Error ? lastError : new Error("w3kits_opendesign_daemon_health_timeout");
+}
+
+async function registerDaemonProxy(serviceWorkerUrl, scope, daemonUrl) {
+  if (!("serviceWorker" in navigator)) throw new Error("w3kits_service_worker_unavailable");
+  const registration = await navigator.serviceWorker.register(serviceWorkerUrl, { scope });
+  await navigator.serviceWorker.ready;
+  const worker = registration.active || registration.waiting || registration.installing;
+  worker?.postMessage({ type: "W3KITS_DAEMON_PROXY_SET_TARGET", daemonUrl });
+  navigator.serviceWorker.controller?.postMessage({ type: "W3KITS_DAEMON_PROXY_SET_TARGET", daemonUrl });
+  return registration;
+}
+
+function mergeEnv(runtime, inputEnv) {
+  return {
+    OD_BIND_HOST: "0.0.0.0",
+    OD_PORT: String(runtime.daemon.port || DEFAULT_DAEMON_PORT),
+    W3KITS_WEBCONTAINER: "1",
+    W3KITS_UNSUPPORTED_ERROR_CODE: runtime.unsupportedLocalOnlyFeatures?.error?.code || "unsupported_in_w3kits_webcontainer_v1",
+    W3KITS_OPENAI_BASE_URL: runtime.ai?.openaiBaseUrl || "https://w3kits.com/api/ai/openai/v1",
+    ...inputEnv,
+  };
+}
+
+export async function bootW3KitsOpenDesignWebContainer(options = {}) {
+  assertCrossOriginIsolated();
+  const runtime = options.runtimeManifest || await loadRuntimeManifest(options.runtimeManifestPath || DEFAULT_RUNTIME_MANIFEST_PATH, options);
+  const WebContainer = options.WebContainer || globalThis.WebContainer;
+  if (!WebContainer?.boot) throw new Error("w3kits_webcontainer_api_unavailable");
+
+  const webcontainer = options.webcontainer || await WebContainer.boot(options.bootOptions || {});
+  if (options.mountTree) await webcontainer.mount(options.mountTree);
+  if (options.mounts) {
+    for (const mount of options.mounts) await webcontainer.mount(mount.tree, mount.options);
+  }
+
+  const env = mergeEnv(runtime, options.env || {});
+  const command = options.command || runtime.daemon.startCommand;
+  const process = await webcontainer.spawn(command[0], command.slice(1), { env });
+  process.output?.pipeTo?.(new WritableStream({
+    write(chunk) {
+      options.onLog?.(String(chunk));
+    },
+  })).catch((error) => options.onError?.(error));
+
+  const daemonUrl = await waitForServerReady(webcontainer, runtime.daemon.port || DEFAULT_DAEMON_PORT, options.startTimeoutMs || 30000);
+  await waitForHealth(daemonUrl, runtime.daemon.healthPath || "/api/health", options.healthTimeoutMs || 30000);
+  const serviceWorker = await registerDaemonProxy(
+    options.serviceWorkerUrl || packageAssetUrl(runtime.serviceWorker.url || DEFAULT_SERVICE_WORKER_URL, options),
+    options.serviceWorkerScope || runtime.serviceWorker.scope || DEFAULT_SERVICE_WORKER_SCOPE,
+    daemonUrl,
+  );
+
+  return { webcontainer, process, daemonUrl, serviceWorker, runtime };
+}
+`;
+  fs.writeFileSync(path.join(dist, 'browser-daemon.js'), source);
+}
+
+function writeDaemonProxyServiceWorker() {
+  const source = `let daemonUrl = null;
+
+function jsonError(code, status) {
+  return new Response(JSON.stringify({ error: { code, message: code } }), {
+    status,
+    headers: { "content-type": "application/json;charset=UTF-8" },
+  });
+}
+
+function shouldProxy(url) {
+  return url.origin === self.location.origin && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/artifacts/"));
+}
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "W3KITS_DAEMON_PROXY_SET_TARGET") return;
+  try {
+    const target = new URL(event.data.daemonUrl);
+    daemonUrl = target.toString();
+  } catch {
+    daemonUrl = null;
+  }
+});
+
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (!shouldProxy(url)) return;
+  event.respondWith((async () => {
+    if (!daemonUrl) return jsonError("w3kits_opendesign_daemon_not_ready", 503);
+    const target = new URL(url.pathname + url.search, daemonUrl);
+    return fetch(target, {
+      method: event.request.method,
+      headers: event.request.headers,
+      body: event.request.method === "GET" || event.request.method === "HEAD" ? undefined : event.request.body,
+      redirect: "manual",
+    });
+  })().catch(() => jsonError("w3kits_opendesign_daemon_proxy_failed", 502)));
+});
+`;
+  fs.writeFileSync(path.join(dist, '__w3kits', 'daemon-proxy-sw.js'), source);
+}
+
 function writeW3KitsRuntimeMetadata() {
   const w3kitsDir = path.join(dist, '__w3kits');
   fs.mkdirSync(w3kitsDir, { recursive: true });
@@ -216,19 +424,88 @@ function writeW3KitsRuntimeMetadata() {
   if (!icon) throw new Error('Missing OpenDesign icon in dist.');
   fs.copyFileSync(icon, path.join(w3kitsDir, 'icon.svg'));
 
-  const daemonSource = [
-    '// W3Kits browser daemon package marker for OpenDesign Web Mode.',
-    '// The first browser release keeps OpenDesign API compatibility in apps/web/src/w3kits/daemon-shim.ts.',
-    '// Core loads this file as the approved WebContainer daemon entry and may replace it with',
-    '// a full Node daemon bundle once OpenDesign WebContainer execution is enabled.',
-    'export const w3kitsBrowserDaemon = {',
-    '  pluginId: "opendesign",',
-    '  mode: "w3kits-webcontainer-placeholder",',
-    '  apiBase: "/api",',
-    '};',
-    '',
-  ].join('\n');
-  fs.writeFileSync(path.join(dist, 'browser-daemon.js'), daemonSource);
+  copyRequiredDir('apps/daemon/dist', '__w3kits/webcontainer-runtime/apps/daemon/dist');
+  copyRequiredFile('apps/daemon/package.json', '__w3kits/webcontainer-runtime/apps/daemon/package.json');
+  for (const packageName of ['contracts', 'platform', 'sidecar', 'sidecar-proto', 'browser-vfs']) {
+    copyRequiredDir(`packages/${packageName}/dist`, `__w3kits/webcontainer-runtime/node_modules/@open-design/${packageName}/dist`);
+    writeJsonFile(
+      `__w3kits/webcontainer-runtime/node_modules/@open-design/${packageName}/package.json`,
+      workspaceRuntimePackageJson(`packages/${packageName}`),
+    );
+  }
+  copyRequiredDir('skills', '__w3kits/assets/skills');
+  copyRequiredDir('design-templates', '__w3kits/assets/design-templates');
+  copyRequiredDir('design-systems', '__w3kits/assets/design-systems');
+
+  const daemonPackage = readPackageJson('apps/daemon');
+  const runtimeDependencies = Object.fromEntries(
+    Object.entries(daemonPackage.dependencies || {}).filter(([name]) => !name.startsWith('@open-design/')),
+  );
+  writeJsonFile('__w3kits/webcontainer-runtime/package.json', {
+    type: 'module',
+    private: true,
+    scripts: {
+      start: 'node ./apps/daemon/dist/cli.js --host 0.0.0.0 --port 7456 --no-open',
+    },
+    dependencies: runtimeDependencies,
+  });
+
+  writeJsonFile('__w3kits/webcontainer-runtime.json', {
+    schemaVersion: 1,
+    pluginId: 'opendesign',
+    mode: 'upstream-daemon-webcontainer',
+    runtimeRoot: '__w3kits/webcontainer-runtime',
+    daemon: {
+      entry: '__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js',
+      startCommand: ['node', '__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js', '--host', '0.0.0.0', '--port', '7456', '--no-open'],
+      port: 7456,
+      healthPath: '/api/health',
+      proxiedPaths: ['/api/*', '/artifacts/*'],
+    },
+    serviceWorker: {
+      url: '__w3kits/daemon-proxy-sw.js',
+      scope: '/',
+    },
+    requiresCrossOriginIsolation: true,
+    ai: {
+      providerName: 'W3Kits AI',
+      openaiBaseUrl: 'https://w3kits.com/api/ai/openai/v1',
+      modelsPath: '/models',
+      runtimeSessionHeader: 'X-W3Kits-Runtime-Session',
+      identityHeaders: ['X-W3Kits-Plugin-Id', 'X-W3Kits-Plugin-Version', 'X-W3Kits-Plugin-Commit'],
+    },
+    mounts: {
+      writableWorkspace: '/workspace',
+      readOnlyAssets: {
+        skills: '__w3kits/assets/skills',
+        designTemplates: '__w3kits/assets/design-templates',
+        designSystems: '__w3kits/assets/design-systems',
+      },
+    },
+    unsupportedLocalOnlyFeatures: {
+      error: {
+        code: 'unsupported_in_w3kits_webcontainer_v1',
+        message: 'This OpenDesign daemon feature requires the local daemon and is not available in W3Kits Web Mode yet.',
+      },
+      features: [
+        'host_child_process_cli',
+        'native_folder_dialog',
+        'local_repo_import',
+        'stdio_mcp',
+        'host_shell_open_path',
+        'native_file_watching',
+        'native_only_storage',
+      ],
+    },
+    knownWebContainerBlockers: [
+      'apps/daemon imports better-sqlite3 and must use a WebContainer-compatible storage path before full smoke can pass.',
+      'host child_process agent adapters must be gated or replaced with W3Kits AI provider calls.',
+      'native dialog, local repo import, stdio MCP, host shell/openPath, and native file watching must return unsupported_in_w3kits_webcontainer_v1.',
+    ],
+  });
+
+  writeOpenDesignWebContainerLauncher();
+  writeDaemonProxyServiceWorker();
 }
 
 function writeW3KitsCatalog() {
