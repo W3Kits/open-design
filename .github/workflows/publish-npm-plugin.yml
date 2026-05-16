@@ -40,5 +40,14 @@ jobs:
           test "$actual" = "${{ inputs.expected_version }}"
       - name: Verify npm package contents
         run: npm pack --dry-run
+      - name: Configure npm publish auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${NODE_AUTH_TOKEN:-}"
+          printf "//registry.npmjs.org/:_authToken=%s\n" "$NODE_AUTH_TOKEN" > .npmrc
       - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
