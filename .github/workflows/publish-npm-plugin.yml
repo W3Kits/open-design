@@ -1,0 +1,39 @@
+name: Publish npm plugin
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Package version to publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @open-design/web test tests/w3kits-daemon-shim.test.ts
+      - run: pnpm build
+      - name: Verify package version
+        run: |
+          set -euo pipefail
+          actual="$(node -p "require('./package.json').version")"
+          test "$actual" = "${{ inputs.expected_version }}"
+      - name: Verify npm package contents
+        run: npm pack --dry-run
+      - name: Publish to npm
+        run: npm publish --provenance --access public
