@@ -204,6 +204,33 @@ function listDesignSystemCatalog() {
   return out;
 }
 
+function writeW3KitsRuntimeMetadata() {
+  const w3kitsDir = path.join(dist, '__w3kits');
+  fs.mkdirSync(w3kitsDir, { recursive: true });
+
+  const iconCandidates = [
+    path.join(dist, 'app-icon.svg'),
+    path.join(dist, 'logo.svg'),
+  ];
+  const icon = iconCandidates.find((candidate) => fs.existsSync(candidate));
+  if (!icon) throw new Error('Missing OpenDesign icon in dist.');
+  fs.copyFileSync(icon, path.join(w3kitsDir, 'icon.svg'));
+
+  const daemonSource = [
+    '// W3Kits browser daemon package marker for OpenDesign Web Mode.',
+    '// The first browser release keeps OpenDesign API compatibility in apps/web/src/w3kits/daemon-shim.ts.',
+    '// Core loads this file as the approved WebContainer daemon entry and may replace it with',
+    '// a full Node daemon bundle once OpenDesign WebContainer execution is enabled.',
+    'export const w3kitsBrowserDaemon = {',
+    '  pluginId: "opendesign",',
+    '  mode: "w3kits-webcontainer-placeholder",',
+    '  apiBase: "/api",',
+    '};',
+    '',
+  ].join('\n');
+  fs.writeFileSync(path.join(dist, 'browser-daemon.js'), daemonSource);
+}
+
 function writeW3KitsCatalog() {
   const catalogDir = path.join(dist, '__w3kits', 'catalog');
   fs.mkdirSync(catalogDir, { recursive: true });
@@ -217,6 +244,7 @@ fs.rmSync(dist, { recursive: true, force: true });
 fs.cpSync(out, dist, { recursive: true });
 sanitizeObjectPaths();
 writeW3KitsCatalog();
+writeW3KitsRuntimeMetadata();
 
 const index = path.join(dist, 'index.html');
 if (!fs.existsSync(index)) throw new Error('Missing dist/index.html after copy.');
