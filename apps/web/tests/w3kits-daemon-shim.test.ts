@@ -75,7 +75,7 @@ describe('W3Kits OpenDesign adapter', () => {
     expect(config.apiKey).toBe('w3kits-plugin-user');
   });
 
-  it('handles project create and list through the W3Kits runtime VFS bridge', async () => {
+  it('handles project create locally and syncs dirty files through the W3Kits runtime VFS bridge', async () => {
     const files = installRuntimeBridge();
     vi.stubGlobal('fetch', vi.fn(async () => new Response('fallback', { status: 599 })));
     const { handleW3KitsDaemonRequest } = await import('../src/w3kits/daemon-shim');
@@ -89,11 +89,19 @@ describe('W3Kits OpenDesign adapter', () => {
     expect(createResponse.status).toBe(200);
     const created = await createResponse.json() as { project: { id: string; name: string } };
     expect(created.project).toMatchObject({ id: 'p_1', name: 'Landing' });
-    expect(files.get('/workspace/projects/p_1/files/DESIGN.md')?.body).toBe('# Landing\n');
+    expect(files.get('/workspace/projects/p_1/files/DESIGN.md')).toBeUndefined();
+
+    const rawResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects/p_1/raw/DESIGN.md'));
+    expect(await rawResponse.text()).toBe('# Landing\n');
 
     const listResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/projects'));
     const listed = await listResponse.json() as { projects: Array<{ id: string; name: string }> };
     expect(listed.projects).toEqual([{ id: 'p_1', name: 'Landing', createdAt: expect.any(Number), updatedAt: expect.any(Number), skillId: null, designSystemId: null }]);
+
+    const syncResponse = await handleW3KitsDaemonRequest(new Request('https://plugin-opendesign.w3kits.com/api/w3kits/sync', { method: 'POST' }));
+    expect(syncResponse.status).toBe(200);
+    expect(await syncResponse.json()).toMatchObject({ uploaded: 3, errors: [] });
+    expect(files.get('/workspace/projects/p_1/files/DESIGN.md')?.body).toBe('# Landing\n');
   });
 
   it('ships the plugin-scoped Service Worker daemon relay asset', () => {

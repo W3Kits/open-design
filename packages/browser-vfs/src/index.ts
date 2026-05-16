@@ -123,8 +123,17 @@ function pathWithinPrefix(path: string, prefix: string): boolean {
 async function sha256Hex(data: Uint8Array): Promise<string> {
   const buffer = new ArrayBuffer(data.byteLength);
   new Uint8Array(buffer).set(data);
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", buffer);
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  } catch {
+    let hash = 0x811c9dc5;
+    for (const byte of data) {
+      hash ^= byte;
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash.toString(16).padStart(8, "0");
+  }
 }
 
 function toBytes(data: Uint8Array | string): Uint8Array {

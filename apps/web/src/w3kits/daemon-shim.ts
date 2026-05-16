@@ -1,4 +1,5 @@
-import { isW3KitsRuntimeAvailable, runtimeList, runtimeReadText, runtimeSync, runtimeWrite } from './bridge';
+import { isW3KitsRuntimeAvailable } from './bridge';
+import { listWorkspaceFiles, readWorkspaceText, syncWorkspaceToCore, writeWorkspaceFile } from './workspace';
 import type { Project, SkillSummary } from '../types';
 import { randomUUID } from '../utils/uuid';
 
@@ -45,7 +46,7 @@ function sseFrame(event: string, data: JsonValue): string {
 }
 
 async function readJson<T>(path: string, fallback: T): Promise<T> {
-  const text = await runtimeReadText(path);
+  const text = await readWorkspaceText(path);
   if (!text) return fallback;
   try {
     return JSON.parse(text) as T;
@@ -55,7 +56,7 @@ async function readJson<T>(path: string, fallback: T): Promise<T> {
 }
 
 async function writeJson(path: string, payload: JsonValue): Promise<void> {
-  await runtimeWrite(path, JSON.stringify(payload, null, 2), { contentType: 'application/json' });
+  await writeWorkspaceFile(path, JSON.stringify(payload, null, 2), { contentType: 'application/json' });
 }
 
 function projectFromEntry(entry: ProjectIndexEntry): Project {
@@ -109,7 +110,7 @@ async function handleProjects(request: Request, url: URL): Promise<Response> {
     };
     await saveProjectIndex([entry, ...index.filter((item) => item.id !== entry.id)]);
     await writeJson(projectDir(entry.id) + '/project.json', entry as unknown as JsonValue);
-    await runtimeWrite(filePath(entry.id, 'DESIGN.md'), '# ' + entry.name + '\n', { contentType: 'text/markdown;charset=utf-8' });
+    await writeWorkspaceFile(filePath(entry.id, 'DESIGN.md'), '# ' + entry.name + '\n', { contentType: 'text/markdown;charset=utf-8' });
     return jsonResponse({ project: projectFromEntry(entry), conversationId: randomUUID() });
   }
   const projectId = parts[2];
@@ -125,18 +126,18 @@ async function handleProjects(request: Request, url: URL): Promise<Response> {
     return jsonResponse({ project: projectFromEntry(next) });
   }
   if (request.method === 'GET' && parts[3] === 'files') {
-    const entries = await runtimeList(projectDir(projectId) + '/files');
+    const entries = await listWorkspaceFiles(projectDir(projectId) + '/files');
     return jsonResponse({ files: entries.filter((item) => item.kind === 'file').map((item) => ({ name: item.path.split('/').pop() || item.path, path: item.path.replace(projectDir(projectId) + '/files/', ''), kind: 'file', size: item.size ?? 0 })) });
   }
   if (request.method === 'POST' && parts[3] === 'files') {
     const body = await request.json().catch(() => ({})) as { path?: string; name?: string; content?: string };
     const targetPath = body.path || body.name || 'untitled.txt';
-    await runtimeWrite(filePath(projectId, targetPath), body.content ?? '', { contentType: 'text/plain;charset=utf-8' });
+    await writeWorkspaceFile(filePath(projectId, targetPath), body.content ?? '', { contentType: 'text/plain;charset=utf-8' });
     return jsonResponse({ ok: true });
   }
   if (request.method === 'GET' && parts[3] === 'raw') {
     const rawPath = decodeURIComponent(parts.slice(4).join('/'));
-    const body = await runtimeReadText(filePath(projectId, rawPath));
+    const body = await readWorkspaceText(filePath(projectId, rawPath));
     return body == null ? textResponse('Not found', 404) : textResponse(body, 200, contentTypeFor(rawPath));
   }
   return jsonResponse({ error: 'unsupported_in_w3kits_web_mode' }, 404);
@@ -239,7 +240,7 @@ export async function handleW3KitsDaemonRequest(request: Request): Promise<Respo
   if (url.pathname === '/api/prompt-templates') return jsonResponse({ promptTemplates: [] });
   if (url.pathname === '/api/version') return jsonResponse({ version: 'w3kits-web' });
   if (url.pathname === '/api/proxy/openai/stream') return handleOpenAiProxy(request);
-  if (url.pathname === '/api/w3kits/sync' && request.method === 'POST') return jsonResponse(await runtimeSync() as unknown as JsonValue);
+  if (url.pathname === '/api/w3kits/sync' && request.method === 'POST') return jsonResponse(await syncWorkspaceToCore() as unknown as JsonValue);
   if (url.pathname.startsWith('/api/projects')) return handleProjects(request, url);
   if (url.pathname.startsWith('/artifacts/')) return textResponse('Artifact rendering is not available yet in W3Kits Web Mode.', 404);
   return fetch(request);

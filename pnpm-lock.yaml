@@ -210,6 +210,9 @@ importers:
       '@anthropic-ai/sdk':
         specifier: ^0.32.1
         version: 0.32.1
+      '@open-design/browser-vfs':
+        specifier: workspace:*
+        version: link:../../packages/browser-vfs
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
