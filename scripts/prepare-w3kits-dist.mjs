@@ -322,17 +322,17 @@ function mergeEnv(runtime, inputEnv) {
 }
 
 function pathJoin(...parts) {
-  return parts.join("/").replace(/\\/g, "/").replace(/\/+/g, "/");
+  return parts.join("/").replace(/\\\\/g, "/").replace(/\\/+/g, "/");
 }
 
 function parentPath(filePath) {
-  const normalized = filePath.replace(/\\/g, "/");
+  const normalized = filePath.replace(/\\\\/g, "/");
   const slash = normalized.lastIndexOf("/");
   return slash <= 0 ? "/" : normalized.slice(0, slash);
 }
 
 function relativePath(root, filePath) {
-  const normalizedRoot = root.replace(/\/+$/, "");
+  const normalizedRoot = root.replace(/\\/+$/, "");
   return filePath === normalizedRoot ? "" : filePath.slice(normalizedRoot.length + 1);
 }
 
