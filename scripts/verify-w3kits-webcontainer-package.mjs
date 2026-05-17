@@ -35,6 +35,12 @@ assert(!launcher.includes('registerDaemonProxy'), 'browser-daemon.js must not pr
 assert(launcher.includes('OD_ALLOWED_ORIGINS'), 'browser-daemon.js must pass the host origin to daemon CORS policy');
 assert(launcher.includes('OD_DATA_DIR'), 'browser-daemon.js must pin the OpenDesign data directory for persistence');
 assert(launcher.includes('/home/agent/.config/opendesign'), 'browser-daemon.js must use /home/agent/.config/opendesign as the WebContainer data directory');
+assert(launcher.includes('startWebContainerAutosave'), 'browser-daemon.js must start periodic WebContainer autosave');
+assert(launcher.includes('w3kits_disk_autosave_upload_failed'), 'browser-daemon.js must upload persisted files through the WebContainer disk route');
+assert(launcher.includes('/webcontainer/disk/files'), 'browser-daemon.js must target the WebContainer disk file route');
+assert(launcher.includes('visibilitychange'), 'browser-daemon.js must flush on lifecycle events');
+assert(launcher.includes('readdir('), 'browser-daemon.js must recursively scan the WebContainer filesystem');
+assert(launcher.includes('readFile('), 'browser-daemon.js must read WebContainer files for autosave');
 
 assert(runtime.schemaVersion === 1, 'runtime manifest schemaVersion must be 1');
 assert(runtime.pluginId === 'opendesign', 'runtime manifest pluginId must be opendesign');
