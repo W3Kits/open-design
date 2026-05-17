@@ -21,6 +21,7 @@ function readJson(relativePath) {
 const launcher = readText('browser-daemon.js');
 const runtime = readJson('__w3kits/webcontainer-runtime.json');
 const runtimePackage = readJson('__w3kits/webcontainer-runtime/package.json');
+const daemonPackage = readJson('__w3kits/webcontainer-runtime/apps/daemon/package.json');
 
 assert(!launcher.includes('w3kits-webcontainer-placeholder'), 'browser-daemon.js still declares placeholder mode');
 assert(!launcher.includes('handleW3KitsDaemonRequest'), 'browser-daemon.js must not import or call fake daemon request handlers');
@@ -32,6 +33,8 @@ assert(launcher.includes('server-ready'), 'browser-daemon.js must wait for WebCo
 assert(!launcher.includes('waitForHealth'), 'browser-daemon.js must not fetch the cross-origin WebContainer preview URL for health checks');
 assert(!launcher.includes('registerDaemonProxy'), 'browser-daemon.js must not proxy daemon APIs through the W3Kits origin');
 assert(launcher.includes('OD_ALLOWED_ORIGINS'), 'browser-daemon.js must pass the host origin to daemon CORS policy');
+assert(launcher.includes('OD_DATA_DIR'), 'browser-daemon.js must pin the OpenDesign data directory for persistence');
+assert(launcher.includes('/home/agent/.config/opendesign'), 'browser-daemon.js must use /home/agent/.config/opendesign as the WebContainer data directory');
 
 assert(runtime.schemaVersion === 1, 'runtime manifest schemaVersion must be 1');
 assert(runtime.pluginId === 'opendesign', 'runtime manifest pluginId must be opendesign');
@@ -46,6 +49,16 @@ assert(runtime.daemon.proxiedPaths?.includes('/api/*'), 'daemon proxiedPaths mus
 assert(runtime.daemon.proxiedPaths?.includes('/artifacts/*'), 'daemon proxiedPaths must include /artifacts/*');
 assert(runtime.unsupportedLocalOnlyFeatures?.error?.code === 'unsupported_in_w3kits_webcontainer_v1', 'runtime manifest must declare stable unsupported error code');
 assert(runtime.ai?.openaiBaseUrl === 'https://w3kits.com/api/ai/openai/v1', 'runtime manifest must use unified W3Kits OpenAI base URL');
+assert(daemonPackage.version === '0.8.0', 'packaged daemon must report upstream OpenDesign 0.8.0');
+assert(runtime.persistence?.dataDir === '/home/agent/.config/opendesign', 'runtime manifest must declare the stable OpenDesign data directory');
+assert(runtime.persistence?.authority === 'w3kits-r2-virtual-disk', 'runtime manifest must declare R2 virtual disk as persistence authority');
+assert(runtime.persistence?.localCache === 'opfs-indexeddb-writeback', 'runtime manifest must declare OPFS/IndexedDB write-back cache');
+assert(runtime.persistence?.flushPolicy?.intervalMs === 30000, 'runtime manifest must declare periodic persistence flush interval');
+assert(runtime.persistence?.include?.includes('app.sqlite'), 'runtime manifest must include app.sqlite in persisted files');
+assert(runtime.persistence?.include?.includes('app.sqlite-wal'), 'runtime manifest must include app.sqlite-wal in persisted files');
+assert(runtime.persistence?.include?.includes('app.sqlite-shm'), 'runtime manifest must include app.sqlite-shm in persisted files');
+assert(runtime.persistence?.sqliteGroups?.some((group) => Array.isArray(group) && group.includes('app.sqlite') && group.includes('app.sqlite-wal') && group.includes('app.sqlite-shm')), 'runtime manifest must persist sqlite main/WAL/SHM files as a group');
+assert(!runtimePackage.dependencies?.['better-sqlite3'], 'WebContainer runtime must not install native better-sqlite3');
 
 const requiredFiles = [
   '__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js',

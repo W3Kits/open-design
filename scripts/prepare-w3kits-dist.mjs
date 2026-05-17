@@ -247,6 +247,7 @@ function writeOpenDesignWebContainerLauncher() {
 const DEFAULT_SERVICE_WORKER_URL = "__w3kits/daemon-proxy-sw.js";
 const DEFAULT_SERVICE_WORKER_SCOPE = "/";
 const DEFAULT_DAEMON_PORT = 7456;
+const DEFAULT_OD_DATA_DIR = "/home/agent/.config/opendesign";
 
 export const w3kitsOpenDesignDaemon = {
   pluginId: "opendesign",
@@ -309,13 +310,14 @@ async function waitForServerReady(webcontainer, expectedPort, timeoutMs) {
 function mergeEnv(runtime, inputEnv) {
   const hostOrigin = globalThis.location?.origin || "https://w3kits.com";
   return {
+    ...inputEnv,
     OD_BIND_HOST: "0.0.0.0",
     OD_PORT: String(runtime.daemon.port || DEFAULT_DAEMON_PORT),
     OD_ALLOWED_ORIGINS: hostOrigin,
+    OD_DATA_DIR: runtime.persistence?.dataDir || DEFAULT_OD_DATA_DIR,
     W3KITS_WEBCONTAINER: "1",
     W3KITS_UNSUPPORTED_ERROR_CODE: runtime.unsupportedLocalOnlyFeatures?.error?.code || "unsupported_in_w3kits_webcontainer_v1",
     W3KITS_OPENAI_BASE_URL: runtime.ai?.openaiBaseUrl || "https://w3kits.com/api/ai/openai/v1",
-    ...inputEnv,
   };
 }
 
@@ -481,6 +483,33 @@ function writeW3KitsRuntimeMetadata() {
         designSystems: '__w3kits/assets/design-systems',
       },
     },
+    persistence: {
+      dataDir: '/home/agent/.config/opendesign',
+      authority: 'w3kits-r2-virtual-disk',
+      localCache: 'opfs-indexeddb-writeback',
+      flushPolicy: {
+        debounceMs: 2000,
+        intervalMs: 30000,
+        lifecycleEvents: ['visibilitychange', 'pagehide', 'daemon-ready', 'run-complete', 'daemon-stop', 'daemon-crash'],
+      },
+      include: [
+        'app.sqlite',
+        'app.sqlite-wal',
+        'app.sqlite-shm',
+        'app-config.json',
+        'media-config.json',
+        'mcp-config.json',
+        'projects/**',
+        'artifacts/**',
+        'memory/**',
+        'skills/**',
+        'design-systems/**',
+        'design-templates/**',
+      ],
+      sqliteGroups: [
+        ['app.sqlite', 'app.sqlite-wal', 'app.sqlite-shm'],
+      ],
+    },
     unsupportedLocalOnlyFeatures: {
       error: {
         code: 'unsupported_in_w3kits_webcontainer_v1',
@@ -497,7 +526,7 @@ function writeW3KitsRuntimeMetadata() {
       ],
     },
     knownWebContainerBlockers: [
-      'apps/daemon imports better-sqlite3 and must use a WebContainer-compatible storage path before full smoke can pass.',
+      'OpenDesign sqlite/config/project state under /home/agent/.config/opendesign must be flushed through the W3Kits R2 virtual disk before reload persistence can pass.',
       'host child_process agent adapters must be gated or replaced with W3Kits AI provider calls.',
       'native dialog, local repo import, stdio MCP, host shell/openPath, and native file watching must return unsupported_in_w3kits_webcontainer_v1.',
     ],
