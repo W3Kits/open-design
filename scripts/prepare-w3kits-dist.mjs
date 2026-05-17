@@ -247,7 +247,8 @@ function writeOpenDesignWebContainerLauncher() {
 const DEFAULT_SERVICE_WORKER_URL = "__w3kits/daemon-proxy-sw.js";
 const DEFAULT_SERVICE_WORKER_SCOPE = "/";
 const DEFAULT_DAEMON_PORT = 7456;
-const DEFAULT_OD_DATA_DIR = "/workspace/.od";
+const DEFAULT_OD_DATA_DIR = "/home/w3kits-webcontainer-host/.w3kits/opendesign/.od";
+const DEFAULT_OD_DISK_ROOT = "/workspace/.od";
 
 export const w3kitsOpenDesignDaemon = {
   pluginId: "opendesign",
@@ -368,6 +369,15 @@ async function listFiles(webcontainer, root) {
   return files;
 }
 
+async function ensureDataDir(webcontainer, runtime, options = {}) {
+  const dataDir = runtime.persistence?.dataDir || DEFAULT_OD_DATA_DIR;
+  try {
+    await webcontainer.fs.mkdir(dataDir, { recursive: true });
+  } catch (error) {
+    options.onError?.(error);
+  }
+}
+
 function shouldPersistFile(runtime, dataDir, filePath) {
   const rel = relativePath(dataDir, filePath);
   if (!rel || rel.startsWith("node_modules/") || rel.includes("/node_modules/")) return false;
@@ -389,6 +399,7 @@ function startWebContainerAutosave(webcontainer, runtime, options = {}) {
   const token = options.r2DiskSession?.token || options.runtimeSession;
   if (!token || typeof fetch !== "function") return { stop() {} };
   const dataDir = runtime.persistence?.dataDir || DEFAULT_OD_DATA_DIR;
+  const diskRoot = runtime.persistence?.diskRoot || DEFAULT_OD_DISK_ROOT;
   const workspaceId = options.r2DiskSession?.workspaceId || options.workspaceId || "default";
   const endpoint = diskFilesEndpoint(runtime, options);
   const intervalMs = runtime.persistence?.flushPolicy?.intervalMs || 30000;
@@ -397,9 +408,10 @@ function startWebContainerAutosave(webcontainer, runtime, options = {}) {
   let flushing = false;
 
   async function upload(filePath, bytes) {
+    const relativeFilePath = relativePath(dataDir, filePath);
     const url = new URL(endpoint, globalThis.location?.origin || "https://w3kits.com");
     url.searchParams.set("workspaceId", workspaceId);
-    url.searchParams.set("path", filePath);
+    url.searchParams.set("path", pathJoin(diskRoot, relativeFilePath));
     const response = await fetch(url.toString(), {
       method: "PUT",
       credentials: "same-origin",
@@ -472,6 +484,7 @@ export async function bootW3KitsOpenDesignWebContainer(options = {}) {
 
   const env = mergeEnv(runtime, options.env || {});
   const command = options.command || runtime.daemon.startCommand;
+  await ensureDataDir(webcontainer, runtime, options);
   const process = await webcontainer.spawn(command[0], command.slice(1), { env });
   process.output?.pipeTo?.(new WritableStream({
     write(chunk) {
@@ -618,7 +631,8 @@ function writeW3KitsRuntimeMetadata() {
       },
     },
     persistence: {
-      dataDir: '/workspace/.od',
+      dataDir: '/home/w3kits-webcontainer-host/.w3kits/opendesign/.od',
+      diskRoot: '/workspace/.od',
       authority: 'w3kits-r2-virtual-disk',
       localCache: 'opfs-indexeddb-writeback',
       flushPolicy: {
@@ -660,7 +674,7 @@ function writeW3KitsRuntimeMetadata() {
       ],
     },
     knownWebContainerBlockers: [
-      'OpenDesign sqlite/config/project state under /workspace/.od must be flushed through the W3Kits R2 virtual disk before reload persistence can pass.',
+      'OpenDesign sqlite/config/project state under the writable WebContainer data dir must be flushed through the W3Kits R2 virtual disk at /workspace/.od before reload persistence can pass.',
       'host child_process agent adapters must be gated or replaced with W3Kits AI provider calls.',
       'native dialog, local repo import, stdio MCP, host shell/openPath, and native file watching must return unsupported_in_w3kits_webcontainer_v1.',
     ],
