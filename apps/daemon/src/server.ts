@@ -1638,10 +1638,13 @@ function applyW3KitsWebContainerCors(req, res, next) {
   if (process.env.W3KITS_WEBCONTAINER !== '1') return next();
 
   const origin = req.get('origin');
-  const allowedOrigins = new Set(configuredAllowedOrigins());
-  if (origin && allowedOrigins.has(origin)) {
+  const allowedOrigins = configuredAllowedOrigins();
+  const allowedOrigin = origin
+    ? (allowedOrigins.includes(origin) ? origin : null)
+    : (allowedOrigins[0] || null);
+  if (allowedOrigin) {
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader(
@@ -1653,7 +1656,7 @@ function applyW3KitsWebContainerCors(req, res, next) {
   }
 
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(origin && allowedOrigins.has(origin) ? 204 : 403);
+    return res.sendStatus(allowedOrigin ? 204 : 403);
   }
   return next();
 }
