@@ -20,6 +20,7 @@ function readJson(relativePath) {
 
 const launcher = readText('browser-daemon.js');
 const runtime = readJson('__w3kits/webcontainer-runtime.json');
+const runtimePackage = readJson('__w3kits/webcontainer-runtime/package.json');
 
 assert(!launcher.includes('w3kits-webcontainer-placeholder'), 'browser-daemon.js still declares placeholder mode');
 assert(!launcher.includes('handleW3KitsDaemonRequest'), 'browser-daemon.js must not import or call fake daemon request handlers');
@@ -54,6 +55,11 @@ const requiredFiles = [
   '__w3kits/webcontainer-runtime/node_modules/@open-design/sidecar/dist/index.mjs',
   '__w3kits/webcontainer-runtime/node_modules/@open-design/sidecar-proto/dist/index.mjs',
   '__w3kits/webcontainer-runtime/node_modules/@open-design/browser-vfs/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/contracts/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/platform/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/sidecar/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/sidecar-proto/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/browser-vfs/package.json',
   '__w3kits/assets/skills',
   '__w3kits/assets/design-templates',
   '__w3kits/assets/design-systems',
@@ -62,6 +68,13 @@ const requiredFiles = [
 
 for (const relativePath of requiredFiles) {
   assert(fs.existsSync(path.join(dist, relativePath)), `missing packaged runtime asset ${relativePath}`);
+}
+
+for (const packageName of ['contracts', 'platform', 'sidecar', 'sidecar-proto', 'browser-vfs']) {
+  assert(
+    runtimePackage.dependencies?.[`@open-design/${packageName}`] === `file:./workspace-packages/@open-design/${packageName}`,
+    `runtime package must install @open-design/${packageName} from packaged workspace files`,
+  );
 }
 
 const proxy = readText('__w3kits/daemon-proxy-sw.js');

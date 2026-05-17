@@ -446,10 +446,16 @@ function writeW3KitsRuntimeMetadata() {
 
   copyRequiredDir('apps/daemon/dist', '__w3kits/webcontainer-runtime/apps/daemon/dist');
   copyRequiredFile('apps/daemon/package.json', '__w3kits/webcontainer-runtime/apps/daemon/package.json');
-  for (const packageName of ['contracts', 'platform', 'sidecar', 'sidecar-proto', 'browser-vfs']) {
+  const workspacePackageNames = ['contracts', 'platform', 'sidecar', 'sidecar-proto', 'browser-vfs'];
+  for (const packageName of workspacePackageNames) {
     copyRequiredDir(`packages/${packageName}/dist`, `__w3kits/webcontainer-runtime/node_modules/@open-design/${packageName}/dist`);
     writeJsonFile(
       `__w3kits/webcontainer-runtime/node_modules/@open-design/${packageName}/package.json`,
+      workspaceRuntimePackageJson(`packages/${packageName}`),
+    );
+    copyRequiredDir(`packages/${packageName}/dist`, `__w3kits/webcontainer-runtime/workspace-packages/@open-design/${packageName}/dist`);
+    writeJsonFile(
+      `__w3kits/webcontainer-runtime/workspace-packages/@open-design/${packageName}/package.json`,
       workspaceRuntimePackageJson(`packages/${packageName}`),
     );
   }
@@ -461,6 +467,9 @@ function writeW3KitsRuntimeMetadata() {
   const runtimeDependencies = Object.fromEntries(
     Object.entries(daemonPackage.dependencies || {}).filter(([name]) => !name.startsWith('@open-design/')),
   );
+  for (const packageName of workspacePackageNames) {
+    runtimeDependencies[`@open-design/${packageName}`] = `file:./workspace-packages/@open-design/${packageName}`;
+  }
   writeJsonFile('__w3kits/webcontainer-runtime/package.json', {
     type: 'module',
     private: true,
