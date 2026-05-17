@@ -321,6 +321,139 @@ function mergeEnv(runtime, inputEnv) {
   };
 }
 
+function pathJoin(...parts) {
+  return parts.join("/").replace(/\\/g, "/").replace(/\/+/g, "/");
+}
+
+function parentPath(filePath) {
+  const normalized = filePath.replace(/\\/g, "/");
+  const slash = normalized.lastIndexOf("/");
+  return slash <= 0 ? "/" : normalized.slice(0, slash);
+}
+
+function relativePath(root, filePath) {
+  const normalizedRoot = root.replace(/\/+$/, "");
+  return filePath === normalizedRoot ? "" : filePath.slice(normalizedRoot.length + 1);
+}
+
+function bytesSignature(bytes) {
+  let hash = 2166136261;
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, 16777619);
+  }
+  return bytes.byteLength + ":" + (hash >>> 0).toString(16);
+}
+
+async function listFiles(webcontainer, root) {
+  const files = [];
+  async function walk(dir) {
+    let entries;
+    try {
+      entries = await webcontainer.fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const name = typeof entry.name === "string" ? entry.name : new TextDecoder().decode(entry.name);
+      const next = pathJoin(dir, name);
+      if (entry.isDirectory?.()) {
+        await walk(next);
+      } else if (entry.isFile?.()) {
+        files.push(next);
+      }
+    }
+  }
+  await walk(root);
+  return files;
+}
+
+function shouldPersistFile(runtime, dataDir, filePath) {
+  const rel = relativePath(dataDir, filePath);
+  if (!rel || rel.startsWith("node_modules/") || rel.includes("/node_modules/")) return false;
+  const includes = runtime.persistence?.include || [];
+  if (!includes.length) return true;
+  return includes.some((pattern) => {
+    if (pattern.endsWith("/**")) return rel === pattern.slice(0, -3) || rel.startsWith(pattern.slice(0, -2));
+    return rel === pattern;
+  });
+}
+
+function diskFilesEndpoint(runtime, options) {
+  if (options.diskFilesEndpoint) return options.diskFilesEndpoint;
+  const pluginId = options.pluginId || runtime.pluginId || "opendesign";
+  return "/api/plugins/" + encodeURIComponent(pluginId) + "/webcontainer/disk/files";
+}
+
+function startWebContainerAutosave(webcontainer, runtime, options = {}) {
+  const token = options.r2DiskSession?.token || options.runtimeSession;
+  if (!token || typeof fetch !== "function") return { stop() {} };
+  const dataDir = runtime.persistence?.dataDir || DEFAULT_OD_DATA_DIR;
+  const workspaceId = options.r2DiskSession?.workspaceId || options.workspaceId || "default";
+  const endpoint = diskFilesEndpoint(runtime, options);
+  const intervalMs = runtime.persistence?.flushPolicy?.intervalMs || 30000;
+  const seen = new Map();
+  let stopped = false;
+  let flushing = false;
+
+  async function upload(filePath, bytes) {
+    const url = new URL(endpoint, globalThis.location?.origin || "https://w3kits.com");
+    url.searchParams.set("workspaceId", workspaceId);
+    url.searchParams.set("path", filePath);
+    const response = await fetch(url.toString(), {
+      method: "PUT",
+      credentials: "same-origin",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-w3kits-runtime-session": token,
+      },
+      body: bytes,
+    });
+    if (!response.ok) throw new Error("w3kits_disk_autosave_upload_failed:" + response.status + ":" + filePath);
+  }
+
+  async function flush(reason = "interval") {
+    if (stopped || flushing) return;
+    flushing = true;
+    try {
+      const files = await listFiles(webcontainer, dataDir);
+      for (const filePath of files) {
+        if (!shouldPersistFile(runtime, dataDir, filePath)) continue;
+        let bytes;
+        try {
+          bytes = await webcontainer.fs.readFile(filePath);
+        } catch {
+          continue;
+        }
+        const signature = bytesSignature(bytes);
+        if (seen.get(filePath) === signature) continue;
+        await upload(filePath, bytes);
+        seen.set(filePath, signature);
+      }
+      options.onLog?.("[w3kits autosave] flushed " + files.length + " files (" + reason + ")");
+    } catch (error) {
+      options.onError?.(error);
+    } finally {
+      flushing = false;
+    }
+  }
+
+  const timer = globalThis.setInterval?.(() => void flush("interval"), intervalMs);
+  const lifecycleFlush = () => void flush("lifecycle");
+  globalThis.addEventListener?.("visibilitychange", lifecycleFlush);
+  globalThis.addEventListener?.("pagehide", lifecycleFlush);
+  void flush("startup");
+  return {
+    flush,
+    stop() {
+      stopped = true;
+      if (timer) globalThis.clearInterval?.(timer);
+      globalThis.removeEventListener?.("visibilitychange", lifecycleFlush);
+      globalThis.removeEventListener?.("pagehide", lifecycleFlush);
+    },
+  };
+}
+
 export async function bootW3KitsOpenDesignWebContainer(options = {}) {
   assertCrossOriginIsolated();
   const runtime = options.runtimeManifest || await loadRuntimeManifest(options.runtimeManifestPath || DEFAULT_RUNTIME_MANIFEST_PATH, options);
@@ -347,7 +480,8 @@ export async function bootW3KitsOpenDesignWebContainer(options = {}) {
   })).catch((error) => options.onError?.(error));
 
   const daemonUrl = await waitForServerReady(webcontainer, runtime.daemon.port || DEFAULT_DAEMON_PORT, options.startTimeoutMs || 30000);
-  return { webcontainer, process, daemonUrl, runtime };
+  const autosave = startWebContainerAutosave(webcontainer, runtime, options);
+  return { webcontainer, process, daemonUrl, runtime, autosave };
 }
 `;
   fs.writeFileSync(path.join(dist, 'browser-daemon.js'), source);
