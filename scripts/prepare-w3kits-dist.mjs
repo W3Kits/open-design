@@ -465,7 +465,7 @@ function writeW3KitsRuntimeMetadata() {
 
   const daemonPackage = readPackageJson('apps/daemon');
   const runtimeDependencies = Object.fromEntries(
-    Object.entries(daemonPackage.dependencies || {}).filter(([name]) => !name.startsWith('@open-design/')),
+    Object.entries(daemonPackage.dependencies || {}).filter(([name]) => !name.startsWith('@open-design/') && name !== 'better-sqlite3'),
   );
   for (const packageName of workspacePackageNames) {
     runtimeDependencies[`@open-design/${packageName}`] = `file:./workspace-packages/@open-design/${packageName}`;

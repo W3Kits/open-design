@@ -45,6 +45,7 @@ assert(runtime.daemon.proxiedPaths?.includes('/api/*'), 'daemon proxiedPaths mus
 assert(runtime.daemon.proxiedPaths?.includes('/artifacts/*'), 'daemon proxiedPaths must include /artifacts/*');
 assert(runtime.unsupportedLocalOnlyFeatures?.error?.code === 'unsupported_in_w3kits_webcontainer_v1', 'runtime manifest must declare stable unsupported error code');
 assert(runtime.ai?.openaiBaseUrl === 'https://w3kits.com/api/ai/openai/v1', 'runtime manifest must use unified W3Kits OpenAI base URL');
+assert(!runtimePackage.dependencies?.['better-sqlite3'], 'WebContainer runtime must not install native better-sqlite3');
 
 const requiredFiles = [
   '__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js',
