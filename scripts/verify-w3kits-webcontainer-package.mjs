@@ -31,6 +31,7 @@ assert(launcher.includes('webcontainer.spawn'), 'browser-daemon.js must start th
 assert(launcher.includes('server-ready'), 'browser-daemon.js must wait for WebContainer server-ready');
 assert(launcher.includes('/api/health'), 'browser-daemon.js must wait for upstream daemon health');
 assert(launcher.includes('W3KITS_DAEMON_PROXY_SET_TARGET'), 'browser-daemon.js must configure the daemon proxy service worker');
+assert(launcher.includes('OD_ALLOWED_ORIGINS'), 'browser-daemon.js must pass the host origin to daemon CORS policy');
 
 assert(runtime.schemaVersion === 1, 'runtime manifest schemaVersion must be 1');
 assert(runtime.pluginId === 'opendesign', 'runtime manifest pluginId must be opendesign');
@@ -82,5 +83,9 @@ const proxy = readText('__w3kits/daemon-proxy-sw.js');
 assert(proxy.includes('W3KITS_DAEMON_PROXY_SET_TARGET'), 'daemon proxy service worker must accept daemon target messages');
 assert(proxy.includes('w3kits_opendesign_daemon_not_ready'), 'daemon proxy service worker must return a typed not-ready error');
 assert(!proxy.includes('W3KITS_DAEMON_REQUEST'), 'daemon proxy service worker must not use old fake daemon relay protocol');
+
+const daemonServer = readText('__w3kits/webcontainer-runtime/apps/daemon/dist/server.js');
+assert(daemonServer.includes('W3KITS_WEBCONTAINER'), 'packaged daemon must include the WebContainer runtime branch');
+assert(daemonServer.includes('Access-Control-Allow-Origin'), 'packaged daemon must include WebContainer CORS headers for W3Kits proxying');
 
 console.log('[w3kits] OpenDesign WebContainer package contract verified');

@@ -1634,6 +1634,30 @@ function requireLocalDaemonRequest(req, res, next) {
   next();
 }
 
+function applyW3KitsWebContainerCors(req, res, next) {
+  if (process.env.W3KITS_WEBCONTAINER !== '1') return next();
+
+  const origin = req.get('origin');
+  const allowedOrigins = new Set(configuredAllowedOrigins());
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      req.get('access-control-request-headers') ||
+        'Content-Type, Authorization, X-W3Kits-Runtime-Session, X-W3Kits-Plugin-Id',
+    );
+    res.setHeader('Access-Control-Max-Age', '600');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(origin && allowedOrigins.has(origin) ? 204 : 403);
+  }
+  return next();
+}
+
 /**
  * Render the small HTML page that the OAuth callback returns to the
  * user's browser tab. It posts a message back to the opener (the
@@ -2179,6 +2203,7 @@ export async function startServer({
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
   const app = express();
+  app.use(applyW3KitsWebContainerCors);
   app.use(express.json({ limit: '4mb' }));
 
   // Multi-directory scanning shared by every skill / template surface. The

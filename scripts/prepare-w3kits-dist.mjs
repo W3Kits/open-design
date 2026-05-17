@@ -333,9 +333,11 @@ async function registerDaemonProxy(serviceWorkerUrl, scope, daemonUrl) {
 }
 
 function mergeEnv(runtime, inputEnv) {
+  const hostOrigin = globalThis.location?.origin || "https://w3kits.com";
   return {
     OD_BIND_HOST: "0.0.0.0",
     OD_PORT: String(runtime.daemon.port || DEFAULT_DAEMON_PORT),
+    OD_ALLOWED_ORIGINS: hostOrigin,
     W3KITS_WEBCONTAINER: "1",
     W3KITS_UNSUPPORTED_ERROR_CODE: runtime.unsupportedLocalOnlyFeatures?.error?.code || "unsupported_in_w3kits_webcontainer_v1",
     W3KITS_OPENAI_BASE_URL: runtime.ai?.openaiBaseUrl || "https://w3kits.com/api/ai/openai/v1",
