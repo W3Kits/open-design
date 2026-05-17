@@ -278,6 +278,22 @@ async function loadRuntimeManifest(manifestPath = DEFAULT_RUNTIME_MANIFEST_PATH,
   return response.json();
 }
 
+async function installRuntimeDependencies(webcontainer, runtimeRoot, options = {}) {
+  const installProcess = await webcontainer.spawn("npm", ["install", "--ignore-scripts", "--no-package-lock", "--no-fund", "--no-audit"], {
+    cwd: runtimeRoot,
+    env: { W3KITS_WEBCONTAINER: "1" },
+  });
+  installProcess.output?.pipeTo?.(new WritableStream({
+    write(chunk) {
+      options.onLog?.(String(chunk));
+    },
+  })).catch((error) => options.onError?.(error));
+  const exitCode = await installProcess.exit;
+  if (exitCode !== 0) {
+    throw new Error("w3kits_opendesign_runtime_install_failed_" + exitCode);
+  }
+}
+
 async function waitForServerReady(webcontainer, expectedPort, timeoutMs) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("w3kits_opendesign_daemon_start_timeout")), timeoutMs);
@@ -338,6 +354,10 @@ export async function bootW3KitsOpenDesignWebContainer(options = {}) {
   if (options.mounts) {
     for (const mount of options.mounts) await webcontainer.mount(mount.tree, mount.options);
   }
+
+  const runtimeRoot = runtime.runtimeRoot || "__w3kits/webcontainer-runtime";
+  options.onLog?.("Installing runtime dependencies in " + runtimeRoot);
+  await installRuntimeDependencies(webcontainer, runtimeRoot, options);
 
   const env = mergeEnv(runtime, options.env || {});
   const command = options.command || runtime.daemon.startCommand;
