@@ -29,8 +29,8 @@ assert(launcher.includes('bootW3KitsOpenDesignWebContainer'), 'browser-daemon.js
 assert(launcher.includes('upstream-daemon-webcontainer'), 'browser-daemon.js must declare upstream daemon WebContainer mode');
 assert(launcher.includes('webcontainer.spawn'), 'browser-daemon.js must start the daemon through WebContainer spawn');
 assert(launcher.includes('server-ready'), 'browser-daemon.js must wait for WebContainer server-ready');
-assert(launcher.includes('/api/health'), 'browser-daemon.js must wait for upstream daemon health');
-assert(launcher.includes('W3KITS_DAEMON_PROXY_SET_TARGET'), 'browser-daemon.js must configure the daemon proxy service worker');
+assert(!launcher.includes('waitForHealth'), 'browser-daemon.js must not fetch the cross-origin WebContainer preview URL for health checks');
+assert(!launcher.includes('registerDaemonProxy'), 'browser-daemon.js must not proxy daemon APIs through the W3Kits origin');
 assert(launcher.includes('OD_ALLOWED_ORIGINS'), 'browser-daemon.js must pass the host origin to daemon CORS policy');
 
 assert(runtime.schemaVersion === 1, 'runtime manifest schemaVersion must be 1');
@@ -50,6 +50,7 @@ assert(runtime.ai?.openaiBaseUrl === 'https://w3kits.com/api/ai/openai/v1', 'run
 const requiredFiles = [
   '__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js',
   '__w3kits/webcontainer-runtime/apps/daemon/dist/server.js',
+  '__w3kits/webcontainer-runtime/apps/web/out/index.html',
   '__w3kits/webcontainer-runtime/package.json',
   '__w3kits/webcontainer-runtime/node_modules/@open-design/contracts/dist/index.mjs',
   '__w3kits/webcontainer-runtime/node_modules/@open-design/platform/dist/index.mjs',

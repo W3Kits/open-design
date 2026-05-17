@@ -306,32 +306,6 @@ async function waitForServerReady(webcontainer, expectedPort, timeoutMs) {
   });
 }
 
-async function waitForHealth(daemonUrl, healthPath, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  let lastError;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(new URL(healthPath, daemonUrl), { cache: "no-store" });
-      if (response.ok) return;
-      lastError = new Error("health_status_" + response.status);
-    } catch (error) {
-      lastError = error;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw lastError instanceof Error ? lastError : new Error("w3kits_opendesign_daemon_health_timeout");
-}
-
-async function registerDaemonProxy(serviceWorkerUrl, scope, daemonUrl) {
-  if (!("serviceWorker" in navigator)) throw new Error("w3kits_service_worker_unavailable");
-  const registration = await navigator.serviceWorker.register(serviceWorkerUrl, { scope });
-  await navigator.serviceWorker.ready;
-  const worker = registration.active || registration.waiting || registration.installing;
-  worker?.postMessage({ type: "W3KITS_DAEMON_PROXY_SET_TARGET", daemonUrl });
-  navigator.serviceWorker.controller?.postMessage({ type: "W3KITS_DAEMON_PROXY_SET_TARGET", daemonUrl });
-  return registration;
-}
-
 function mergeEnv(runtime, inputEnv) {
   const hostOrigin = globalThis.location?.origin || "https://w3kits.com";
   return {
@@ -371,14 +345,7 @@ export async function bootW3KitsOpenDesignWebContainer(options = {}) {
   })).catch((error) => options.onError?.(error));
 
   const daemonUrl = await waitForServerReady(webcontainer, runtime.daemon.port || DEFAULT_DAEMON_PORT, options.startTimeoutMs || 30000);
-  await waitForHealth(daemonUrl, runtime.daemon.healthPath || "/api/health", options.healthTimeoutMs || 30000);
-  const serviceWorker = await registerDaemonProxy(
-    options.serviceWorkerUrl || packageAssetUrl(runtime.serviceWorker.url || DEFAULT_SERVICE_WORKER_URL, options),
-    options.serviceWorkerScope || runtime.serviceWorker.scope || DEFAULT_SERVICE_WORKER_SCOPE,
-    daemonUrl,
-  );
-
-  return { webcontainer, process, daemonUrl, serviceWorker, runtime };
+  return { webcontainer, process, daemonUrl, runtime };
 }
 `;
   fs.writeFileSync(path.join(dist, 'browser-daemon.js'), source);
@@ -446,6 +413,7 @@ function writeW3KitsRuntimeMetadata() {
   if (!icon) throw new Error('Missing OpenDesign icon in dist.');
   fs.copyFileSync(icon, path.join(w3kitsDir, 'icon.svg'));
 
+  copyRequiredDir('apps/web/out', '__w3kits/webcontainer-runtime/apps/web/out');
   copyRequiredDir('apps/daemon/dist', '__w3kits/webcontainer-runtime/apps/daemon/dist');
   copyRequiredFile('apps/daemon/package.json', '__w3kits/webcontainer-runtime/apps/daemon/package.json');
   const workspacePackageNames = ['contracts', 'platform', 'sidecar', 'sidecar-proto', 'browser-vfs'];
