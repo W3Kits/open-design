@@ -348,6 +348,9 @@ const DEFAULT_SERVICE_WORKER_SCOPE = "/";
 const DEFAULT_DAEMON_PORT = 7456;
 const DEFAULT_OD_DATA_DIR = "/home/w3kits-webcontainer-host/.w3kits/opendesign/.od";
 const DEFAULT_OD_DISK_ROOT = "/workspace/.od";
+const W3KITS_DEFAULT_MODEL = "gpt-5.4-mini";
+const W3KITS_DEFAULT_IMAGE_MODEL = "gpt-image-2";
+const W3KITS_PLUGIN_API_KEY = "w3kits-plugin-user";
 
 export const w3kitsOpenDesignDaemon = {
   pluginId: "opendesign",
@@ -501,6 +504,72 @@ async function ensureDataDir(webcontainer, runtime, options = {}) {
   }
 }
 
+async function readJsonFile(webcontainer, filePath) {
+  try {
+    const body = await webcontainer.fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(body);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeJsonFile(webcontainer, filePath, value) {
+  await webcontainer.fs.mkdir(parentPath(filePath), { recursive: true });
+  await webcontainer.fs.writeFile(filePath, JSON.stringify(value, null, 2));
+}
+
+async function seedW3KitsDefaults(webcontainer, runtime, env, options = {}) {
+  const dataDir = runtime.persistence?.dataDir || DEFAULT_OD_DATA_DIR;
+  const openaiBaseUrl = env.W3KITS_OPENAI_BASE_URL || runtime.ai?.openaiBaseUrl || "https://w3kits.com/api/ai/openai/v1";
+  const appConfigPath = pathJoin(dataDir, "app-config.json");
+  const mediaConfigPath = pathJoin(dataDir, "media-config.json");
+
+  try {
+    const appConfig = await readJsonFile(webcontainer, appConfigPath);
+    const codexEnv = {
+      ...(appConfig.agentCliEnv?.codex || {}),
+      OPENAI_BASE_URL: appConfig.agentCliEnv?.codex?.OPENAI_BASE_URL || openaiBaseUrl,
+      OPENAI_API_KEY: appConfig.agentCliEnv?.codex?.OPENAI_API_KEY || W3KITS_PLUGIN_API_KEY,
+    };
+    const nextAppConfig = {
+      ...appConfig,
+      onboardingCompleted: appConfig.onboardingCompleted === false ? false : true,
+      agentId: appConfig.agentId || "codex",
+      agentModels: {
+        ...(appConfig.agentModels || {}),
+        codex: {
+          ...(appConfig.agentModels?.codex || {}),
+          model: appConfig.agentModels?.codex?.model || W3KITS_DEFAULT_MODEL,
+        },
+      },
+      agentCliEnv: {
+        ...(appConfig.agentCliEnv || {}),
+        codex: codexEnv,
+      },
+    };
+    await writeJsonFile(webcontainer, appConfigPath, nextAppConfig);
+
+    const mediaConfig = await readJsonFile(webcontainer, mediaConfigPath);
+    const nextMediaConfig = {
+      ...mediaConfig,
+      providers: {
+        ...(mediaConfig.providers || {}),
+        openai: {
+          ...(mediaConfig.providers?.openai || {}),
+          apiKey: mediaConfig.providers?.openai?.apiKey || W3KITS_PLUGIN_API_KEY,
+          baseUrl: mediaConfig.providers?.openai?.baseUrl || openaiBaseUrl,
+          model: mediaConfig.providers?.openai?.model || W3KITS_DEFAULT_IMAGE_MODEL,
+        },
+      },
+    };
+    await writeJsonFile(webcontainer, mediaConfigPath, nextMediaConfig);
+    options.onLog?.("[w3kits defaults] seeded OpenDesign AI and media config");
+  } catch (error) {
+    options.onError?.(error);
+  }
+}
+
 function shouldPersistFile(runtime, dataDir, filePath) {
   const rel = relativePath(dataDir, filePath);
   if (!rel || rel.startsWith("node_modules/") || rel.includes("/node_modules/")) return false;
@@ -608,6 +677,7 @@ export async function bootW3KitsOpenDesignWebContainer(options = {}) {
   const env = mergeEnv(runtime, options.env || {});
   const command = options.command || runtime.daemon.startCommand;
   await ensureDataDir(webcontainer, runtime, options);
+  await seedW3KitsDefaults(webcontainer, runtime, env, options);
   const process = await webcontainer.spawn(command[0], command.slice(1), { env });
   process.output?.pipeTo?.(new WritableStream({
     write(chunk) {
@@ -745,6 +815,8 @@ function writeW3KitsRuntimeMetadata() {
       providerName: 'W3Kits AI',
       openaiBaseUrl: 'https://w3kits.com/api/ai/openai/v1',
       modelsPath: '/models',
+      defaultModel: 'gpt-5.4-mini',
+      defaultImageModel: 'gpt-image-2',
       runtimeSessionHeader: 'X-W3Kits-Runtime-Session',
       identityHeaders: ['X-W3Kits-Plugin-Id', 'X-W3Kits-Plugin-Version', 'X-W3Kits-Plugin-Commit'],
     },

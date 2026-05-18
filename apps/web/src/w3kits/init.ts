@@ -4,7 +4,7 @@ import type { AppConfig } from '../types';
 const STORAGE_KEY = 'open-design:config';
 const W3KITS_OPENAI_BASE_URL = 'https://w3kits.com/api/ai/openai/v1';
 const W3KITS_PLUGIN_API_KEY = 'w3kits-plugin-user';
-const DEFAULT_MODEL = 'gpt-4o-mini';
+const DEFAULT_MODEL = 'gpt-5.4-mini';
 
 export function buildW3KitsDefaultConfig(current: Partial<AppConfig> = {}): Partial<AppConfig> {
   return {
