@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const root = process.cwd();
 const out = path.join(root, 'apps/web/out');
@@ -231,6 +232,24 @@ function writeJsonFile(targetRelative, data) {
   fs.writeFileSync(target, JSON.stringify(data, null, 2) + '\n');
 }
 
+function installPackagedRuntimeDependencies(runtimeRoot) {
+  const nodeModules = path.join(runtimeRoot, 'node_modules');
+  const vendorNodeModules = path.join(runtimeRoot, 'vendor_node_modules');
+  fs.rmSync(nodeModules, { recursive: true, force: true });
+  fs.rmSync(vendorNodeModules, { recursive: true, force: true });
+  execFileSync('npm', ['install', '--ignore-scripts', '--omit=dev', '--package-lock=false', '--no-fund', '--no-audit'], {
+    cwd: runtimeRoot,
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      npm_config_audit: 'false',
+      npm_config_fund: 'false',
+    },
+  });
+  if (!fs.existsSync(nodeModules)) throw new Error('Runtime dependency install did not create node_modules');
+  fs.renameSync(nodeModules, vendorNodeModules);
+}
+
 function workspaceRuntimePackageJson(packagePath) {
   const packageJson = readPackageJson(packagePath);
   return {
@@ -281,6 +300,24 @@ async function loadRuntimeManifest(manifestPath = DEFAULT_RUNTIME_MANIFEST_PATH,
 }
 
 async function installRuntimeDependencies(webcontainer, runtimeRoot, options = {}) {
+  const markers = [
+    "node_modules/express/package.json",
+    "node_modules/undici/package.json",
+    "node_modules/@open-design/platform/package.json",
+  ];
+  const packaged = await Promise.all(markers.map(async (marker) => {
+    try {
+      await webcontainer.fs.readFile(runtimeRoot.replace(/\\/+$/, "") + "/" + marker);
+      return true;
+    } catch {
+      return false;
+    }
+  }));
+  if (packaged.every(Boolean)) {
+    options.onLog?.("Using packaged runtime dependencies in " + runtimeRoot);
+    return;
+  }
+
   const installProcess = await webcontainer.spawn("npm", ["install", "--ignore-scripts", "--no-package-lock", "--no-fund", "--no-audit"], {
     cwd: runtimeRoot,
     env: { W3KITS_WEBCONTAINER: "1" },
@@ -608,6 +645,7 @@ function writeW3KitsRuntimeMetadata() {
     },
     dependencies: runtimeDependencies,
   });
+  installPackagedRuntimeDependencies(path.join(dist, '__w3kits/webcontainer-runtime'));
 
   writeJsonFile('__w3kits/webcontainer-runtime.json', {
     schemaVersion: 1,
