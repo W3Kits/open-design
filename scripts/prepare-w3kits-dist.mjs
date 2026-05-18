@@ -315,9 +315,15 @@ function mergeEnv(runtime, inputEnv) {
     OD_PORT: String(runtime.daemon.port || DEFAULT_DAEMON_PORT),
     OD_ALLOWED_ORIGINS: hostOrigin,
     OD_DATA_DIR: runtime.persistence?.dataDir || DEFAULT_OD_DATA_DIR,
+    OD_RESOURCE_ROOT: runtime.resources?.root || "__w3kits/webcontainer-runtime/resources",
     W3KITS_WEBCONTAINER: "1",
     W3KITS_UNSUPPORTED_ERROR_CODE: runtime.unsupportedLocalOnlyFeatures?.error?.code || "unsupported_in_w3kits_webcontainer_v1",
     W3KITS_OPENAI_BASE_URL: runtime.ai?.openaiBaseUrl || "https://w3kits.com/api/ai/openai/v1",
+    W3KITS_RUNTIME_SESSION: inputEnv.W3KITS_RUNTIME_SESSION || runtime.ai?.runtimeSession || "",
+    W3KITS_PLUGIN_ID: runtime.pluginId || inputEnv.W3KITS_PLUGIN_ID || "",
+    W3KITS_PLUGIN_VERSION: runtime.version || inputEnv.W3KITS_PLUGIN_VERSION || "",
+    W3KITS_PLUGIN_PACKAGE: runtime.packageName || inputEnv.W3KITS_PLUGIN_PACKAGE || "",
+    W3KITS_PLUGIN_INTEGRITY: runtime.packageIntegrity || inputEnv.W3KITS_PLUGIN_INTEGRITY || "",
   };
 }
 
@@ -568,6 +574,11 @@ function writeW3KitsRuntimeMetadata() {
   copyRequiredDir('skills', '__w3kits/assets/skills');
   copyRequiredDir('design-templates', '__w3kits/assets/design-templates');
   copyRequiredDir('design-systems', '__w3kits/assets/design-systems');
+  copyRequiredDir('prompt-templates', '__w3kits/assets/prompt-templates');
+  copyRequiredDir('skills', '__w3kits/webcontainer-runtime/resources/skills');
+  copyRequiredDir('design-templates', '__w3kits/webcontainer-runtime/resources/design-templates');
+  copyRequiredDir('design-systems', '__w3kits/webcontainer-runtime/resources/design-systems');
+  copyRequiredDir('prompt-templates', '__w3kits/webcontainer-runtime/resources/prompt-templates');
 
   const daemonPackage = readPackageJson('apps/daemon');
   const runtimeDependencies = Object.fromEntries(
@@ -608,6 +619,9 @@ function writeW3KitsRuntimeMetadata() {
       modelsPath: '/models',
       runtimeSessionHeader: 'X-W3Kits-Runtime-Session',
       identityHeaders: ['X-W3Kits-Plugin-Id', 'X-W3Kits-Plugin-Version', 'X-W3Kits-Plugin-Commit'],
+    },
+    resources: {
+      root: '__w3kits/webcontainer-runtime/resources',
     },
     mounts: {
       writableWorkspace: '/workspace',

@@ -35,6 +35,10 @@ assert(!launcher.includes('registerDaemonProxy'), 'browser-daemon.js must not pr
 assert(launcher.includes('OD_ALLOWED_ORIGINS'), 'browser-daemon.js must pass the host origin to daemon CORS policy');
 assert(launcher.includes('OD_DATA_DIR'), 'browser-daemon.js must pin the OpenDesign data directory for persistence');
 assert(launcher.includes('/home/agent/.config/opendesign'), 'browser-daemon.js must use /home/agent/.config/opendesign as the WebContainer data directory');
+assert(launcher.includes('OD_RESOURCE_ROOT'), 'browser-daemon.js must pin daemon resource roots for bundled templates');
+assert(launcher.includes('W3KITS_RUNTIME_SESSION'), 'browser-daemon.js must pass the W3Kits runtime session to the daemon');
+assert(launcher.includes('/home/agent/.config/opendesign'), 'browser-daemon.js must use a writable WebContainer home data directory');
+assert(launcher.includes('/home/agent/.config/opendesign'), 'browser-daemon.js must persist OpenDesign data under the stable R2 disk root');
 assert(launcher.includes('startWebContainerAutosave'), 'browser-daemon.js must start periodic WebContainer autosave');
 assert(launcher.includes('w3kits_disk_autosave_upload_failed'), 'browser-daemon.js must upload persisted files through the WebContainer disk route');
 assert(launcher.includes('/webcontainer/disk/files'), 'browser-daemon.js must target the WebContainer disk file route');
@@ -56,7 +60,9 @@ assert(runtime.daemon.proxiedPaths?.includes('/artifacts/*'), 'daemon proxiedPat
 assert(runtime.unsupportedLocalOnlyFeatures?.error?.code === 'unsupported_in_w3kits_webcontainer_v1', 'runtime manifest must declare stable unsupported error code');
 assert(runtime.ai?.openaiBaseUrl === 'https://w3kits.com/api/ai/openai/v1', 'runtime manifest must use unified W3Kits OpenAI base URL');
 assert(daemonPackage.version === '0.8.0', 'packaged daemon must report upstream OpenDesign 0.8.0');
-assert(runtime.persistence?.dataDir === '/home/agent/.config/opendesign', 'runtime manifest must declare the stable OpenDesign data directory');
+assert(runtime.resources?.root === '__w3kits/webcontainer-runtime/resources', 'runtime manifest must expose daemon-visible resource root');
+assert(runtime.persistence?.dataDir === '/home/agent/.config/opendesign', 'runtime manifest must declare the writable OpenDesign data directory');
+assert(runtime.persistence?.diskRoot === '/home/agent/.config/opendesign', 'runtime manifest must declare the stable OpenDesign R2 disk root');
 assert(runtime.persistence?.authority === 'w3kits-r2-virtual-disk', 'runtime manifest must declare R2 virtual disk as persistence authority');
 assert(runtime.persistence?.localCache === 'opfs-indexeddb-writeback', 'runtime manifest must declare OPFS/IndexedDB write-back cache');
 assert(runtime.persistence?.flushPolicy?.intervalMs === 30000, 'runtime manifest must declare periodic persistence flush interval');
@@ -84,6 +90,12 @@ const requiredFiles = [
   '__w3kits/assets/skills',
   '__w3kits/assets/design-templates',
   '__w3kits/assets/design-systems',
+  '__w3kits/assets/prompt-templates',
+  '__w3kits/webcontainer-runtime/resources/skills',
+  '__w3kits/webcontainer-runtime/resources/design-templates',
+  '__w3kits/webcontainer-runtime/resources/design-systems',
+  '__w3kits/webcontainer-runtime/resources/prompt-templates',
+  '__w3kits/webcontainer-runtime/resources/design-templates/dashboard/SKILL.md',
   '__w3kits/daemon-proxy-sw.js',
 ];
 
@@ -106,5 +118,9 @@ assert(!proxy.includes('W3KITS_DAEMON_REQUEST'), 'daemon proxy service worker mu
 const daemonServer = readText('__w3kits/webcontainer-runtime/apps/daemon/dist/server.js');
 assert(daemonServer.includes('W3KITS_WEBCONTAINER'), 'packaged daemon must include the WebContainer runtime branch');
 assert(daemonServer.includes('Access-Control-Allow-Origin'), 'packaged daemon must include WebContainer CORS headers for W3Kits proxying');
+assert(daemonServer.includes('OD_RESOURCE_ROOT'), 'packaged daemon must support OD_RESOURCE_ROOT for bundled templates');
+const chatRoutes = readText('__w3kits/webcontainer-runtime/apps/daemon/dist/chat-routes.js');
+assert(chatRoutes.includes('x-w3kits-runtime-session'), 'packaged daemon proxy must forward the W3Kits runtime session header');
+assert(chatRoutes.includes('x-w3kits-plugin-id'), 'packaged daemon proxy must forward W3Kits plugin identity headers');
 
 console.log('[w3kits] OpenDesign WebContainer package contract verified');

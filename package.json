@@ -1,7 +1,7 @@
 {
-  "name": "open-design",
-  "version": "0.8.0",
-  "private": true,
+  "name": "@w3kits/plugin-opendesign",
+  "version": "0.1.31",
+  "private": false,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
   "description": "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
@@ -22,7 +22,9 @@
     "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",
     "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
     "seed:curated-design-skills": "node --experimental-strip-types scripts/seed-curated-design-skills.ts",
-    "typecheck": "pnpm -r --workspace-concurrency=4 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit"
+    "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit",
+    "build": "pnpm --filter @open-design/contracts build && pnpm --filter @open-design/platform build && pnpm --filter @open-design/sidecar-proto build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/daemon build && W3KITS_PLUGIN_BUILD=1 pnpm --filter @open-design/web build && node scripts/prepare-w3kits-dist.mjs && node scripts/verify-w3kits-webcontainer-package.mjs",
+    "verify:w3kits-package": "node scripts/verify-w3kits-webcontainer-package.mjs"
   },
   "devDependencies": {
     "@open-design/tools-dev": "workspace:*",
@@ -53,5 +55,23 @@
       "electron",
       "esbuild"
     ]
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/W3Kits/open-design.git"
+  },
+  "bugs": {
+    "url": "https://github.com/W3Kits/open-design/issues"
+  },
+  "homepage": "https://github.com/W3Kits/open-design#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "package.json"
+  ]
 }

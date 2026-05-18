@@ -63,6 +63,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
     return false;
   };
+  const w3kitsOpenAiBaseUrl = process.env.W3KITS_OPENAI_BASE_URL || 'https://w3kits.com/api/ai/openai/v1';
+  const w3kitsRuntimeSession = process.env.W3KITS_RUNTIME_SESSION || '';
+  const w3kitsPluginId = process.env.W3KITS_PLUGIN_ID || '';
+  const w3kitsPluginVersion = process.env.W3KITS_PLUGIN_VERSION || '';
+  const w3kitsPluginPackage = process.env.W3KITS_PLUGIN_PACKAGE || '';
+  const w3kitsPluginIntegrity = process.env.W3KITS_PLUGIN_INTEGRITY || '';
 
   // The canonical POST /api/runs handler lives in `server.ts` — it ran
   // first in Express's registration order long before this file existed,
@@ -487,6 +493,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     return url.toString();
   };
 
+  const maybeAttachW3KitsHeaders = (baseUrl: string, headers: Record<string, string>) => {
+    const normalized = baseUrl.replace(/\/+$/, '');
+    const isW3KitsBase =
+      normalized === w3kitsOpenAiBaseUrl.replace(/\/+$/, '') ||
+      normalized === 'https://w3kits.com/api/ai/openai/v1';
+    if (!isW3KitsBase) return headers;
+    const next = { ...headers };
+    if (w3kitsRuntimeSession) next['x-w3kits-runtime-session'] = w3kitsRuntimeSession;
+    if (w3kitsPluginId) next['x-w3kits-plugin-id'] = w3kitsPluginId;
+    if (w3kitsPluginVersion) next['x-w3kits-plugin-version'] = w3kitsPluginVersion;
+    if (w3kitsPluginPackage) next['x-w3kits-plugin-package'] = w3kitsPluginPackage;
+    if (w3kitsPluginIntegrity) next['x-w3kits-plugin-integrity'] = w3kitsPluginIntegrity;
+    return next;
+  };
+
   const collectSseFrame = (frame: string) => {
     const lines = frame.replace(/\r/g, '').split('\n');
     const dataLines = [];
@@ -768,6 +789,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${apiKey}`,
+          ...maybeAttachW3KitsHeaders(baseUrl, {}),
         },
         body: JSON.stringify(payload),
         redirect: 'error',
