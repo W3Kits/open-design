@@ -214,6 +214,55 @@ function copyRequiredDir(sourceRelative, targetRelative) {
   fs.cpSync(source, target, { recursive: true });
 }
 
+function removeIfExists(target) {
+  fs.rmSync(target, { recursive: true, force: true });
+}
+
+function pruneDirectoryNames(rootDir, names) {
+  if (!fs.existsSync(rootDir)) return;
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+    const full = path.join(rootDir, entry.name);
+    if (!entry.isDirectory()) continue;
+    if (names.has(entry.name)) {
+      removeIfExists(full);
+      continue;
+    }
+    pruneDirectoryNames(full, names);
+  }
+}
+
+function pruneFiles(rootDir, shouldRemove) {
+  if (!fs.existsSync(rootDir)) return;
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+    const full = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      pruneFiles(full, shouldRemove);
+    } else if (entry.isFile() && shouldRemove(full, entry.name)) {
+      fs.rmSync(full, { force: true });
+    }
+  }
+}
+
+function pruneBundledResources(resourcesRoot) {
+  const nonRuntimeDirectoryNames = new Set([
+    '.git',
+    '.github',
+    '.preview',
+    '__screenshots__',
+    '__snapshots__',
+    'coverage',
+    'docs',
+    'readme',
+    'screenshots',
+    'verify-output',
+  ]);
+  pruneDirectoryNames(resourcesRoot, nonRuntimeDirectoryNames);
+  pruneFiles(resourcesRoot, (_full, name) =>
+    /^readme(\.|$)/i.test(name) ||
+    /\.(map|tsbuildinfo)$/i.test(name),
+  );
+}
+
 function copyRequiredFile(sourceRelative, targetRelative) {
   const source = path.join(root, sourceRelative);
   if (!fs.existsSync(source)) throw new Error('Missing required runtime file: ' + sourceRelative);
@@ -248,6 +297,37 @@ function installPackagedRuntimeDependencies(runtimeRoot) {
   });
   if (!fs.existsSync(nodeModules)) throw new Error('Runtime dependency install did not create node_modules');
   fs.renameSync(nodeModules, vendorNodeModules);
+  pruneVendorNodeModules(vendorNodeModules);
+}
+
+function pruneVendorNodeModules(vendorNodeModules) {
+  const nonRuntimeDirectoryNames = new Set([
+    '.github',
+    '.nyc_output',
+    'benchmark',
+    'benchmarks',
+    'bench',
+    'coverage',
+    'demo',
+    'demos',
+    'doc',
+    'docs',
+    'example',
+    'examples',
+    'perf',
+    'scripts',
+    'test',
+    'tests',
+    '__tests__',
+  ]);
+  pruneDirectoryNames(vendorNodeModules, nonRuntimeDirectoryNames);
+  pruneFiles(vendorNodeModules, (full, name) => {
+    if (name === 'package.json') return false;
+    if (/\.(map|md|markdown|ts|tsx|d\.ts|mts|cts|tsbuildinfo)$/i.test(name)) return true;
+    if (/^(license|licence|notice|readme|changelog|changes|history|authors|contributing|security)(\.|$)/i.test(name)) return true;
+    if (full.includes(`${path.sep}.bin${path.sep}`)) return false;
+    return false;
+  });
 }
 
 function workspaceRuntimePackageJson(packagePath) {
@@ -608,14 +688,11 @@ function writeW3KitsRuntimeMetadata() {
       workspaceRuntimePackageJson(`packages/${packageName}`),
     );
   }
-  copyRequiredDir('skills', '__w3kits/assets/skills');
-  copyRequiredDir('design-templates', '__w3kits/assets/design-templates');
-  copyRequiredDir('design-systems', '__w3kits/assets/design-systems');
-  copyRequiredDir('prompt-templates', '__w3kits/assets/prompt-templates');
   copyRequiredDir('skills', '__w3kits/webcontainer-runtime/resources/skills');
   copyRequiredDir('design-templates', '__w3kits/webcontainer-runtime/resources/design-templates');
   copyRequiredDir('design-systems', '__w3kits/webcontainer-runtime/resources/design-systems');
   copyRequiredDir('prompt-templates', '__w3kits/webcontainer-runtime/resources/prompt-templates');
+  pruneBundledResources(path.join(dist, '__w3kits/webcontainer-runtime/resources'));
 
   const daemonPackage = readPackageJson('apps/daemon');
   const runtimeDependencies = Object.fromEntries(
@@ -664,9 +741,9 @@ function writeW3KitsRuntimeMetadata() {
     mounts: {
       writableWorkspace: '/workspace',
       readOnlyAssets: {
-        skills: '__w3kits/assets/skills',
-        designTemplates: '__w3kits/assets/design-templates',
-        designSystems: '__w3kits/assets/design-systems',
+        skills: '__w3kits/webcontainer-runtime/resources/skills',
+        designTemplates: '__w3kits/webcontainer-runtime/resources/design-templates',
+        designSystems: '__w3kits/webcontainer-runtime/resources/design-systems',
       },
     },
     persistence: {
