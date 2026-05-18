@@ -45,6 +45,7 @@ assert(launcher.includes('/webcontainer/disk/files'), 'browser-daemon.js must ta
 assert(launcher.includes('visibilitychange'), 'browser-daemon.js must flush on lifecycle events');
 assert(launcher.includes('readdir('), 'browser-daemon.js must recursively scan the WebContainer filesystem');
 assert(launcher.includes('readFile('), 'browser-daemon.js must read WebContainer files for autosave');
+assert(launcher.includes('Using packaged runtime dependencies'), 'browser-daemon.js must skip npm install when packaged runtime dependencies are mounted');
 
 assert(runtime.schemaVersion === 1, 'runtime manifest schemaVersion must be 1');
 assert(runtime.pluginId === 'opendesign', 'runtime manifest pluginId must be opendesign');
@@ -77,11 +78,13 @@ const requiredFiles = [
   '__w3kits/webcontainer-runtime/apps/daemon/dist/server.js',
   '__w3kits/webcontainer-runtime/apps/web/out/index.html',
   '__w3kits/webcontainer-runtime/package.json',
-  '__w3kits/webcontainer-runtime/node_modules/@open-design/contracts/dist/index.mjs',
-  '__w3kits/webcontainer-runtime/node_modules/@open-design/platform/dist/index.mjs',
-  '__w3kits/webcontainer-runtime/node_modules/@open-design/sidecar/dist/index.mjs',
-  '__w3kits/webcontainer-runtime/node_modules/@open-design/sidecar-proto/dist/index.mjs',
-  '__w3kits/webcontainer-runtime/node_modules/@open-design/browser-vfs/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/express/package.json',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/undici/package.json',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/contracts/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/platform/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/sidecar/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/sidecar-proto/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/browser-vfs/dist/index.mjs',
   '__w3kits/webcontainer-runtime/workspace-packages/@open-design/contracts/package.json',
   '__w3kits/webcontainer-runtime/workspace-packages/@open-design/platform/package.json',
   '__w3kits/webcontainer-runtime/workspace-packages/@open-design/sidecar/package.json',
