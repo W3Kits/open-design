@@ -33,6 +33,8 @@ assert(!launcher.includes('waitForHealth'), 'browser-daemon.js must not fetch th
 assert(!launcher.includes('registerDaemonProxy'), 'browser-daemon.js must not proxy daemon APIs through the W3Kits origin');
 assert(launcher.includes('OD_ALLOWED_ORIGINS'), 'browser-daemon.js must pass the host origin to daemon CORS policy');
 assert(launcher.includes('OD_DATA_DIR'), 'browser-daemon.js must pin the OpenDesign data directory for persistence');
+assert(launcher.includes('OD_RESOURCE_ROOT'), 'browser-daemon.js must pin daemon resource roots for bundled templates');
+assert(launcher.includes('W3KITS_RUNTIME_SESSION'), 'browser-daemon.js must pass the W3Kits runtime session to the daemon');
 assert(launcher.includes('/home/w3kits-webcontainer-host/.w3kits/opendesign/.od'), 'browser-daemon.js must use a writable WebContainer home data directory');
 assert(launcher.includes('/workspace/.od'), 'browser-daemon.js must persist OpenDesign data under the stable R2 disk root');
 assert(launcher.includes('startWebContainerAutosave'), 'browser-daemon.js must start periodic WebContainer autosave');
@@ -55,6 +57,7 @@ assert(runtime.daemon.proxiedPaths?.includes('/api/*'), 'daemon proxiedPaths mus
 assert(runtime.daemon.proxiedPaths?.includes('/artifacts/*'), 'daemon proxiedPaths must include /artifacts/*');
 assert(runtime.unsupportedLocalOnlyFeatures?.error?.code === 'unsupported_in_w3kits_webcontainer_v1', 'runtime manifest must declare stable unsupported error code');
 assert(runtime.ai?.openaiBaseUrl === 'https://w3kits.com/api/ai/openai/v1', 'runtime manifest must use unified W3Kits OpenAI base URL');
+assert(runtime.resources?.root === '__w3kits/webcontainer-runtime/resources', 'runtime manifest must expose daemon-visible resource root');
 assert(runtime.persistence?.dataDir === '/home/w3kits-webcontainer-host/.w3kits/opendesign/.od', 'runtime manifest must declare the writable OpenDesign data directory');
 assert(runtime.persistence?.diskRoot === '/workspace/.od', 'runtime manifest must declare the stable OpenDesign R2 disk root');
 assert(runtime.persistence?.authority === 'w3kits-r2-virtual-disk', 'runtime manifest must declare R2 virtual disk as persistence authority');
@@ -84,6 +87,12 @@ const requiredFiles = [
   '__w3kits/assets/skills',
   '__w3kits/assets/design-templates',
   '__w3kits/assets/design-systems',
+  '__w3kits/assets/prompt-templates',
+  '__w3kits/webcontainer-runtime/resources/skills',
+  '__w3kits/webcontainer-runtime/resources/design-templates',
+  '__w3kits/webcontainer-runtime/resources/design-systems',
+  '__w3kits/webcontainer-runtime/resources/prompt-templates',
+  '__w3kits/webcontainer-runtime/resources/design-templates/dashboard/SKILL.md',
   '__w3kits/daemon-proxy-sw.js',
 ];
 
@@ -106,5 +115,9 @@ assert(!proxy.includes('W3KITS_DAEMON_REQUEST'), 'daemon proxy service worker mu
 const daemonServer = readText('__w3kits/webcontainer-runtime/apps/daemon/dist/server.js');
 assert(daemonServer.includes('W3KITS_WEBCONTAINER'), 'packaged daemon must include the WebContainer runtime branch');
 assert(daemonServer.includes('Access-Control-Allow-Origin'), 'packaged daemon must include WebContainer CORS headers for W3Kits proxying');
+assert(daemonServer.includes('OD_RESOURCE_ROOT'), 'packaged daemon must support OD_RESOURCE_ROOT for bundled templates');
+const chatRoutes = readText('__w3kits/webcontainer-runtime/apps/daemon/dist/chat-routes.js');
+assert(chatRoutes.includes('x-w3kits-runtime-session'), 'packaged daemon proxy must forward the W3Kits runtime session header');
+assert(chatRoutes.includes('x-w3kits-plugin-id'), 'packaged daemon proxy must forward W3Kits plugin identity headers');
 
 console.log('[w3kits] OpenDesign WebContainer package contract verified');
