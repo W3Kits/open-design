@@ -59,7 +59,7 @@ describe('W3Kits OpenDesign adapter', () => {
     expect(config.apiProtocolConfigs?.openai).toMatchObject({
       baseUrl: 'https://w3kits.com/api/ai/openai/v1',
       apiKey: 'w3kits-plugin-user',
-      model: 'gpt-4o-mini',
+      model: 'gpt-5.4-mini',
     });
   });
 
