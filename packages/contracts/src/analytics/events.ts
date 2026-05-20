@@ -1067,7 +1067,7 @@ export interface SettingsByokTestResultProps {
   // wire format matches the doc.
   area: 'execution_model';
   provider_id: TrackingByokProviderId;
-  result: TrackingTestResult;
+  result: TrackingTestResult | 'not_ready';
   error_code?: string;
   duration_ms: number;
 }
@@ -1397,4 +1397,3 @@ export function deriveConfigureGlobals(
     configure_availability: configureAvailability,
   };
 }
-
