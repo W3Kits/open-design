@@ -822,7 +822,7 @@ function writeW3KitsRuntimeMetadata() {
       root: '__w3kits/webcontainer-runtime/resources',
     },
     mounts: {
-      writableWorkspace: '/workspace',
+      writableWorkspace: '/home/agent',
       readOnlyAssets: {
         skills: '__w3kits/webcontainer-runtime/resources/skills',
         designTemplates: '__w3kits/webcontainer-runtime/resources/design-templates',
