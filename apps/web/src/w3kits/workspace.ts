@@ -2,16 +2,17 @@ import { createPersistentBrowserWorkspace, type BrowserWorkspace, type Workspace
 import { runtimeDelete, runtimeList, runtimeRead, runtimeSync, runtimeWrite, type W3KitsRuntimeListEntry } from './bridge';
 
 const WORKSPACE_NAMESPACE = 'opendesign-w3kits-web-mode-v1';
+const W3KITS_REMOTE_WORKSPACE_ROOT = '/home/agent/.config/opendesign';
 const workspacePromise = createPersistentBrowserWorkspace({ namespace: WORKSPACE_NAMESPACE });
 
 function corePath(path: string): string {
   const normalized = path.startsWith('/') ? path : '/' + path;
-  return '/workspace' + normalized;
+  return W3KITS_REMOTE_WORKSPACE_ROOT + normalized;
 }
 
 function localPath(path: string): string {
-  if (path === '/workspace') return '/';
-  if (path.startsWith('/workspace/')) return path.slice('/workspace'.length);
+  if (path === W3KITS_REMOTE_WORKSPACE_ROOT) return '/';
+  if (path.startsWith(`${W3KITS_REMOTE_WORKSPACE_ROOT}/`)) return path.slice(W3KITS_REMOTE_WORKSPACE_ROOT.length);
   return path.startsWith('/') ? path : '/' + path;
 }
 

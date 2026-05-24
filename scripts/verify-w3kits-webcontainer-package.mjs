@@ -43,8 +43,8 @@ assert(launcher.includes('OD_ALLOWED_ORIGINS'), 'browser-daemon.js must pass the
 assert(launcher.includes('OD_DATA_DIR'), 'browser-daemon.js must pin the OpenDesign data directory for persistence');
 assert(launcher.includes('OD_RESOURCE_ROOT'), 'browser-daemon.js must pin daemon resource roots for bundled templates');
 assert(launcher.includes('W3KITS_RUNTIME_SESSION'), 'browser-daemon.js must pass the W3Kits runtime session to the daemon');
-assert(launcher.includes('/home/w3kits-webcontainer-host/.w3kits/opendesign/.od'), 'browser-daemon.js must use a writable WebContainer home data directory');
-assert(launcher.includes('/workspace/.od'), 'browser-daemon.js must persist OpenDesign data under the stable R2 disk root');
+assert(launcher.includes('/home/agent/.config/opendesign'), 'browser-daemon.js must use a writable WebContainer home data directory');
+assert(launcher.includes('/home/agent/.config/opendesign'), 'browser-daemon.js must persist OpenDesign data under the stable R2 disk root');
 assert(launcher.includes('gpt-5.4-mini'), 'browser-daemon.js must seed the W3Kits default text model');
 assert(launcher.includes('gpt-image-2'), 'browser-daemon.js must seed the W3Kits default OpenAI image model');
 assert(launcher.includes('media-config.json'), 'browser-daemon.js must seed OpenAI media provider config');
@@ -72,8 +72,8 @@ assert(runtime.ai?.openaiBaseUrl === 'https://w3kits.com/api/ai/openai/v1', 'run
 assert(runtime.ai?.defaultModel === 'gpt-5.4-mini', 'runtime manifest must declare the W3Kits default text model');
 assert(runtime.ai?.defaultImageModel === 'gpt-image-2', 'runtime manifest must declare the W3Kits default OpenAI image model');
 assert(runtime.resources?.root === '__w3kits/webcontainer-runtime/resources', 'runtime manifest must expose daemon-visible resource root');
-assert(runtime.persistence?.dataDir === '/home/w3kits-webcontainer-host/.w3kits/opendesign/.od', 'runtime manifest must declare the writable OpenDesign data directory');
-assert(runtime.persistence?.diskRoot === '/workspace/.od', 'runtime manifest must declare the stable OpenDesign R2 disk root');
+assert(runtime.persistence?.dataDir === '/home/agent/.config/opendesign', 'runtime manifest must declare the writable OpenDesign data directory');
+assert(runtime.persistence?.diskRoot === '/home/agent/.config/opendesign', 'runtime manifest must declare the stable OpenDesign R2 disk root');
 assert(runtime.persistence?.authority === 'w3kits-r2-virtual-disk', 'runtime manifest must declare R2 virtual disk as persistence authority');
 assert(runtime.persistence?.localCache === 'opfs-indexeddb-writeback', 'runtime manifest must declare OPFS/IndexedDB write-back cache');
 assert(runtime.persistence?.flushPolicy?.intervalMs === 30000, 'runtime manifest must declare periodic persistence flush interval');

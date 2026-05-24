@@ -70,7 +70,7 @@ describe('W3Kits OpenDesign adapter', () => {
 
     const localConfig = JSON.parse(window.localStorage.getItem('open-design:config') || '{}') as { baseUrl?: string };
     expect(localConfig.baseUrl).toBe('https://w3kits.com/api/ai/openai/v1');
-    expect(bridge.files.get('/workspace/config/open-design.json')?.body).toContain('https://w3kits.com/api/ai/openai/v1');
+    expect(bridge.files.get('/home/agent/.config/opendesign/config/open-design.json')?.body).toContain('https://w3kits.com/api/ai/openai/v1');
     expect(bridge.parentMessages).toEqual([expect.objectContaining({ type: 'W3KITS_RUNTIME_FS_WRITE' })]);
   });
 

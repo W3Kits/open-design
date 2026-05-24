@@ -346,8 +346,8 @@ function writeOpenDesignWebContainerLauncher() {
 const DEFAULT_SERVICE_WORKER_URL = "__w3kits/daemon-proxy-sw.js";
 const DEFAULT_SERVICE_WORKER_SCOPE = "/";
 const DEFAULT_DAEMON_PORT = 7456;
-const DEFAULT_OD_DATA_DIR = "/home/w3kits-webcontainer-host/.w3kits/opendesign/.od";
-const DEFAULT_OD_DISK_ROOT = "/workspace/.od";
+const DEFAULT_OD_DATA_DIR = "/home/agent/.config/opendesign";
+const DEFAULT_OD_DISK_ROOT = "/home/agent/.config/opendesign";
 const W3KITS_DEFAULT_MODEL = "gpt-5.4-mini";
 const W3KITS_DEFAULT_IMAGE_MODEL = "gpt-image-2";
 const W3KITS_PLUGIN_API_KEY = "w3kits-plugin-user";
@@ -824,7 +824,7 @@ function writeW3KitsRuntimeMetadata() {
       root: '__w3kits/webcontainer-runtime/resources',
     },
     mounts: {
-      writableWorkspace: '/workspace',
+      writableWorkspace: '/home/agent',
       readOnlyAssets: {
         skills: '__w3kits/webcontainer-runtime/resources/skills',
         designTemplates: '__w3kits/webcontainer-runtime/resources/design-templates',
@@ -832,8 +832,8 @@ function writeW3KitsRuntimeMetadata() {
       },
     },
     persistence: {
-      dataDir: '/home/w3kits-webcontainer-host/.w3kits/opendesign/.od',
-      diskRoot: '/workspace/.od',
+      dataDir: '/home/agent/.config/opendesign',
+      diskRoot: '/home/agent/.config/opendesign',
       authority: 'w3kits-r2-virtual-disk',
       localCache: 'opfs-indexeddb-writeback',
       flushPolicy: {
@@ -875,7 +875,7 @@ function writeW3KitsRuntimeMetadata() {
       ],
     },
     knownWebContainerBlockers: [
-      'OpenDesign sqlite/config/project state under the writable WebContainer data dir must be flushed through the W3Kits R2 virtual disk at /workspace/.od before reload persistence can pass.',
+      'OpenDesign sqlite/config/project state under the writable WebContainer data dir must be flushed through the W3Kits R2 virtual disk at /home/agent/.config/opendesign before reload persistence can pass.',
       'host child_process agent adapters must be gated or replaced with W3Kits AI provider calls.',
       'native dialog, local repo import, stdio MCP, host shell/openPath, and native file watching must return unsupported_in_w3kits_webcontainer_v1.',
     ],

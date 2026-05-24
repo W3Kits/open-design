@@ -151,7 +151,7 @@ export async function runtimeDelete(path: string, expectedEtag?: string): Promis
   return data.deleted;
 }
 
-export async function runtimeList(path = '/workspace'): Promise<W3KitsRuntimeListEntry[]> {
+export async function runtimeList(path = '/home/agent/.config/opendesign'): Promise<W3KitsRuntimeListEntry[]> {
   const data = await sendW3KitsRuntimeMessage<{ entries: W3KitsRuntimeListEntry[] }>({ type: W3KITS_RUNTIME_FS_LIST, path });
   return data.entries ?? [];
 }
