@@ -18,9 +18,17 @@ function readJson(relativePath) {
   return JSON.parse(readText(relativePath));
 }
 
+function readSourceText(...relativePath) {
+  const file = path.join(root, ...relativePath);
+  assert(fs.existsSync(file), `missing source file ${relativePath.join('/')}`);
+  return fs.readFileSync(file, 'utf8');
+}
+
 const launcher = readText('browser-daemon.js');
 const runtime = readJson('__w3kits/webcontainer-runtime.json');
 const runtimePackage = readJson('__w3kits/webcontainer-runtime/package.json');
+const webMediaModels = readSourceText('apps', 'web', 'src', 'media', 'models.ts');
+const daemonMediaModels = readSourceText('apps', 'daemon', 'src', 'media-models.ts');
 
 assert(!launcher.includes('w3kits-webcontainer-placeholder'), 'browser-daemon.js still declares placeholder mode');
 assert(!launcher.includes('handleW3KitsDaemonRequest'), 'browser-daemon.js must not import or call fake daemon request handlers');
@@ -74,6 +82,13 @@ assert(runtime.persistence?.include?.includes('app.sqlite-wal'), 'runtime manife
 assert(runtime.persistence?.include?.includes('app.sqlite-shm'), 'runtime manifest must include app.sqlite-shm in persisted files');
 assert(runtime.persistence?.sqliteGroups?.some((group) => Array.isArray(group) && group.includes('app.sqlite') && group.includes('app.sqlite-wal') && group.includes('app.sqlite-shm')), 'runtime manifest must persist sqlite main/WAL/SHM files as a group');
 assert(!runtimePackage.dependencies?.['better-sqlite3'], 'WebContainer runtime must not install native better-sqlite3');
+
+for (const registryText of [webMediaModels, daemonMediaModels]) {
+  assert(registryText.includes('gpt-image-2'), 'media registries must include gpt-image-2');
+  assert(registryText.includes('dall-e-3'), 'media registries must include dall-e-3');
+  assert(registryText.includes('grok-video'), 'media registries must include reserved grok-video');
+  assert(registryText.includes('veo'), 'media registries must include reserved veo');
+}
 
 const requiredFiles = [
   '__w3kits/webcontainer-runtime/apps/daemon/dist/cli.js',

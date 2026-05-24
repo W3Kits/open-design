@@ -412,6 +412,13 @@ export const VIDEO_MODELS: MediaModel[] = [
 
   // xAI Grok Imagine — 720p t2v + i2v with natively generated audio.
   {
+    id: 'grok-video',
+    label: 'grok-video',
+    hint: 'xAI · reserved video model id',
+    provider: 'grok',
+    caps: ['t2v', 'i2v', 'audio'],
+  },
+  {
     id: 'grok-imagine-video',
     label: 'grok-imagine-video',
     hint: 'xAI · 720p t2v + i2v + native audio',
@@ -425,6 +432,13 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'kling-1.5', label: 'kling-1.5', hint: 'Kuaishou', provider: 'kling', caps: ['t2v', 'i2v'] },
 
   // Google Veo.
+  {
+    id: 'veo',
+    label: 'veo',
+    hint: 'Google · reserved video model id',
+    provider: 'google',
+    caps: ['t2v'],
+  },
   { id: 'veo-3', label: 'veo-3', hint: 'Google · sound-on', provider: 'google', caps: ['t2v', 'audio'] },
   { id: 'veo-2', label: 'veo-2', hint: 'Google', provider: 'google', caps: ['t2v'] },
 
