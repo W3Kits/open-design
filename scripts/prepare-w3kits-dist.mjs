@@ -810,7 +810,7 @@ function writeW3KitsRuntimeMetadata() {
     },
     requiresCrossOriginIsolation: true,
     ai: {
-      providerName: 'W3Kits AI',
+      providerName: 'OpenAI Compatible',
       openaiBaseUrl: 'https://w3kits.com/api/ai/openai/v1',
       modelsPath: '/models',
       defaultModel: 'gpt-5.4-mini',
@@ -872,8 +872,8 @@ function writeW3KitsRuntimeMetadata() {
       ],
     },
     knownWebContainerBlockers: [
-      'OpenDesign sqlite/config/project state under /home/agent/.config/opendesign must be flushed through the W3Kits R2 virtual disk before reload persistence can pass.',
-      'host child_process agent adapters must be gated or replaced with W3Kits AI provider calls.',
+      'OpenDesign sqlite/config/project state under the writable WebContainer data dir must be flushed through the W3Kits R2 virtual disk at /home/agent/.config/opendesign before reload persistence can pass.',
+      'host child_process agent adapters must be gated or replaced with OpenAI-compatible provider calls.',
       'native dialog, local repo import, stdio MCP, host shell/openPath, and native file watching must return unsupported_in_w3kits_webcontainer_v1.',
     ],
   });

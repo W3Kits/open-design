@@ -64,8 +64,8 @@ assert(runtime.daemon.proxiedPaths?.includes('/artifacts/*'), 'daemon proxiedPat
 assert(runtime.unsupportedLocalOnlyFeatures?.error?.code === 'unsupported_in_w3kits_webcontainer_v1', 'runtime manifest must declare stable unsupported error code');
 assert(runtime.ai?.openaiBaseUrl === 'https://w3kits.com/api/ai/openai/v1', 'runtime manifest must use unified W3Kits OpenAI base URL');
 assert(daemonPackage.version === '0.8.0', 'packaged daemon must report upstream OpenDesign 0.8.0');
-assert(runtime.ai?.defaultModel === 'gpt-5.4-mini', 'runtime manifest must declare the W3Kits default text model');
-assert(runtime.ai?.defaultImageModel === 'gpt-image-2', 'runtime manifest must declare the W3Kits default OpenAI image model');
+assert(runtime.ai?.defaultModel === 'gpt-5.4-mini', 'runtime manifest must declare the managed default text model');
+assert(runtime.ai?.defaultImageModel === 'gpt-image-2', 'runtime manifest must declare the managed default OpenAI image model');
 assert(runtime.resources?.root === '__w3kits/webcontainer-runtime/resources', 'runtime manifest must expose daemon-visible resource root');
 assert(runtime.persistence?.dataDir === '/home/agent/.config/opendesign', 'runtime manifest must declare the writable OpenDesign data directory');
 assert(runtime.persistence?.diskRoot === '/home/agent/.config/opendesign', 'runtime manifest must declare the stable OpenDesign R2 disk root');
