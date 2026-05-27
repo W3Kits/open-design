@@ -382,6 +382,11 @@ async function loadRuntimeManifest(manifestPath = DEFAULT_RUNTIME_MANIFEST_PATH,
   return response.json();
 }
 
+function absoluteWebContainerPath(path) {
+  const normalized = String(path || "").replace(/^\/+|\/+$|\\/g, "");
+  return normalized ? "/" + normalized : "/";
+}
+
 async function installRuntimeDependencies(webcontainer, runtimeRoot, options = {}) {
   const markers = [
     "node_modules/express/package.json",
@@ -402,7 +407,7 @@ async function installRuntimeDependencies(webcontainer, runtimeRoot, options = {
   }
 
   const installProcess = await webcontainer.spawn("npm", ["install", "--ignore-scripts", "--no-package-lock", "--no-fund", "--no-audit"], {
-    cwd: runtimeRoot,
+    cwd: absoluteWebContainerPath(runtimeRoot),
     env: { W3KITS_WEBCONTAINER: "1" },
   });
   installProcess.output?.pipeTo?.(new WritableStream({
@@ -678,7 +683,7 @@ export async function bootW3KitsOpenDesignWebContainer(options = {}) {
   const command = options.command || runtime.daemon.startCommand;
   await ensureDataDir(webcontainer, runtime, options);
   await seedW3KitsDefaults(webcontainer, runtime, env, options);
-  const process = await webcontainer.spawn(command[0], command.slice(1), { env });
+  const process = await webcontainer.spawn(command[0], command.slice(1), { cwd: "/", env });
   process.output?.pipeTo?.(new WritableStream({
     write(chunk) {
       options.onLog?.(String(chunk));

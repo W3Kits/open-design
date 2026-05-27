@@ -15,6 +15,7 @@
 - wires AI calls to `W3KITS_OPENAI_BASE_URL`
 - verifies the emitted W3Kits package with `scripts/verify-w3kits-webcontainer-package.mjs`
 - publishes `dist/` as the reviewed plugin artifact surface
+- pins WebContainer daemon startup to the WebContainer root so shared runtimes do not resolve `__w3kits/...` under `/home`
 
 ## What Stays Upstream-Owned
 

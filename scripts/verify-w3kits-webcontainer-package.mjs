@@ -55,6 +55,8 @@ assert(launcher.includes('visibilitychange'), 'browser-daemon.js must flush on l
 assert(launcher.includes('readdir('), 'browser-daemon.js must recursively scan the WebContainer filesystem');
 assert(launcher.includes('readFile('), 'browser-daemon.js must read WebContainer files for autosave');
 assert(launcher.includes('Using packaged runtime dependencies'), 'browser-daemon.js must skip npm install when packaged runtime dependencies are mounted');
+assert(launcher.includes('absoluteWebContainerPath'), 'browser-daemon.js must normalize runtime cwd paths');
+assert(launcher.includes('cwd: "/"'), 'browser-daemon.js must start the daemon from the WebContainer root');
 
 assert(runtime.schemaVersion === 1, 'runtime manifest schemaVersion must be 1');
 assert(runtime.pluginId === 'opendesign', 'runtime manifest pluginId must be opendesign');
