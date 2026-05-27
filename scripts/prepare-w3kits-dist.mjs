@@ -383,7 +383,7 @@ async function loadRuntimeManifest(manifestPath = DEFAULT_RUNTIME_MANIFEST_PATH,
 }
 
 function absoluteWebContainerPath(path) {
-  const normalized = String(path || "").replace(/^\/+|\/+$|\\/g, "");
+  const normalized = String(path || "").replace(/^\\/+|\\/+$/g, "");
   return normalized ? "/" + normalized : "/";
 }
 

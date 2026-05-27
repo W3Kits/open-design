@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -19,6 +20,8 @@ function readJson(relativePath) {
 }
 
 const launcher = readText('browser-daemon.js');
+const launcherCheck = spawnSync(process.execPath, ['--check', path.join(dist, 'browser-daemon.js')], { encoding: 'utf8' });
+assert(launcherCheck.status === 0, `browser-daemon.js must be valid JavaScript: ${launcherCheck.stderr || launcherCheck.stdout}`);
 const runtime = readJson('__w3kits/webcontainer-runtime.json');
 const runtimePackage = readJson('__w3kits/webcontainer-runtime/package.json');
 const daemonPackage = readJson('__w3kits/webcontainer-runtime/apps/daemon/package.json');
