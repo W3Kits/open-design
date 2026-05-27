@@ -59,12 +59,28 @@ const DICTS: Record<Locale, Dict> = {
 
 const LS_KEY = 'open-design:locale';
 
+function localeFromW3KitsParams(): Locale | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('w3kitsLocale') || params.get('locale');
+    return requested && (LOCALES as string[]).includes(requested) ? requested as Locale : null;
+  } catch {
+    return null;
+  }
+}
+
 // First-run default is English. We honor an explicit user pick saved to
 // localStorage but never auto-detect from `navigator.language`, so the
 // initial experience is consistent and predictable.
 function detectInitialLocale(): Locale {
   if (typeof window === 'undefined') return 'en';
   try {
+    const w3kitsLocale = localeFromW3KitsParams();
+    if (w3kitsLocale) {
+      window.localStorage.setItem(LS_KEY, w3kitsLocale);
+      return w3kitsLocale;
+    }
     const stored = window.localStorage.getItem(LS_KEY);
     if (stored && (LOCALES as string[]).includes(stored)) {
       return stored as Locale;

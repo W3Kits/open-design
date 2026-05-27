@@ -61,6 +61,11 @@ describe('W3Kits OpenDesign adapter', () => {
       apiKey: 'w3kits-plugin-user',
       model: 'gpt-5.4-mini',
     });
+    expect(config.mediaProviders?.openai).toMatchObject({
+      baseUrl: 'https://w3kits.com/api/ai/openai/v1',
+      apiKey: 'w3kits-plugin-user',
+      model: 'gpt-image-2',
+    });
   });
 
   it('persists default config through the W3Kits runtime VFS bridge without installing a fake daemon', async () => {
@@ -72,6 +77,19 @@ describe('W3Kits OpenDesign adapter', () => {
     expect(localConfig.baseUrl).toBe('https://w3kits.com/api/ai/openai/v1');
     expect(bridge.files.get('/home/agent/.config/opendesign/config/open-design.json')?.body).toContain('https://w3kits.com/api/ai/openai/v1');
     expect(bridge.parentMessages).toEqual([expect.objectContaining({ type: 'W3KITS_RUNTIME_FS_WRITE' })]);
+  });
+
+  it('honors W3Kits runtime language and OpenAI base URL parameters', async () => {
+    window.history.replaceState(null, '', '/?locale=zh-CN&openaiBaseUrl=https%3A%2F%2Fw3kits.test%2Fapi%2Fai%2Fopenai%2Fv1');
+    const bridge = installRuntimeBridge();
+    installW3KitsOpenDesignAdapter();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const localConfig = JSON.parse(window.localStorage.getItem('open-design:config') || '{}') as { baseUrl?: string; mediaProviders?: { openai?: { baseUrl?: string } } };
+    expect(window.localStorage.getItem('open-design:locale')).toBe('zh-CN');
+    expect(localConfig.baseUrl).toBe('https://w3kits.test/api/ai/openai/v1');
+    expect(localConfig.mediaProviders?.openai?.baseUrl).toBe('https://w3kits.test/api/ai/openai/v1');
+    expect(bridge.files.get('/home/agent/.config/opendesign/config/open-design.json')?.body).toContain('https://w3kits.test/api/ai/openai/v1');
   });
 
   it('does not ship the removed fake daemon relay source or Service Worker', () => {
