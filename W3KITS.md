@@ -14,6 +14,7 @@
 - builds a browser entry and browser daemon for the shared W3Kits WebContainer runtime
 - wires AI calls to `W3KITS_OPENAI_BASE_URL`
 - verifies the emitted W3Kits package with `scripts/verify-w3kits-webcontainer-package.mjs`
+- validates `dist/browser-daemon.js` with `node --check` before package publication
 - publishes `dist/` as the reviewed plugin artifact surface
 - pins WebContainer daemon startup to the WebContainer root so shared runtimes do not resolve `__w3kits/...` under `/home`
 
