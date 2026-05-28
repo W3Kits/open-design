@@ -454,17 +454,17 @@ function mergeEnv(runtime, inputEnv) {
 }
 
 function pathJoin(...parts) {
-  return parts.join("/").replace(/\\/g, "/").replace(/\/+/g, "/");
+  return parts.join("/").replace(/\\\\/g, "/").replace(/\\/+/g, "/");
 }
 
 function parentPath(filePath) {
-  const normalized = filePath.replace(/\\/g, "/");
+  const normalized = filePath.replace(/\\\\/g, "/");
   const slash = normalized.lastIndexOf("/");
   return slash <= 0 ? "/" : normalized.slice(0, slash);
 }
 
 function relativePath(root, filePath) {
-  const normalizedRoot = root.replace(/\/+$/, "");
+  const normalizedRoot = root.replace(/\\/+$/, "");
   return filePath === normalizedRoot ? "" : filePath.slice(normalizedRoot.length + 1);
 }
 
@@ -761,7 +761,7 @@ function writeW3KitsRuntimeMetadata() {
   copyRequiredDir('apps/web/out', '__w3kits/webcontainer-runtime/apps/web/out');
   copyRequiredDir('apps/daemon/dist', '__w3kits/webcontainer-runtime/apps/daemon/dist');
   copyRequiredFile('apps/daemon/package.json', '__w3kits/webcontainer-runtime/apps/daemon/package.json');
-  const workspacePackageNames = ['contracts', 'platform', 'sidecar', 'sidecar-proto', 'browser-vfs'];
+  const workspacePackageNames = ["contracts","platform","sidecar","sidecar-proto","agui-adapter","diagnostics","plugin-runtime","registry-protocol","host"];
   for (const packageName of workspacePackageNames) {
     copyRequiredDir(`packages/${packageName}/dist`, `__w3kits/webcontainer-runtime/node_modules/@open-design/${packageName}/dist`);
     writeJsonFile(
@@ -782,7 +782,7 @@ function writeW3KitsRuntimeMetadata() {
 
   const daemonPackage = readPackageJson('apps/daemon');
   const runtimeDependencies = Object.fromEntries(
-    Object.entries(daemonPackage.dependencies || {}).filter(([name]) => !name.startsWith('@open-design/')),
+    Object.entries(daemonPackage.dependencies || {}).filter(([name]) => !name.startsWith('@open-design/') && name !== 'better-sqlite3'),
   );
   for (const packageName of workspacePackageNames) {
     runtimeDependencies[`@open-design/${packageName}`] = `file:./workspace-packages/@open-design/${packageName}`;
@@ -836,6 +836,7 @@ function writeW3KitsRuntimeMetadata() {
     },
     persistence: {
       dataDir: '/home/agent/.config/opendesign',
+      diskRoot: '/home/agent/.config/opendesign',
       authority: 'w3kits-r2-virtual-disk',
       localCache: 'opfs-indexeddb-writeback',
       flushPolicy: {

@@ -4,13 +4,15 @@
 // (HTML artifacts, sketches, uploads); this database tracks the metadata
 // that used to live in localStorage.
 
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media-tasks.js';
 import { migratePlugins } from './plugins/persistence.js';
+import { createW3KitsMemoryDatabase } from './w3kits-memory-sqlite.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -18,6 +20,7 @@ type JsonObject = Record<string, unknown>;
 
 let dbInstance: SqliteDb | null = null;
 let dbFile: string | null = null;
+const require = createRequire(import.meta.url);
 
 function row(value: unknown): DbRow | null {
   return value && typeof value === 'object' ? value as DbRow : null;
@@ -33,9 +36,11 @@ export function openDatabase(projectRoot: string, { dataDir }: { dataDir?: strin
   if (dbInstance && dbFile === file) return dbInstance;
   if (dbInstance) closeDatabase();
   fs.mkdirSync(dir, { recursive: true });
-  const db = new Database(file);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  const db = process.env.W3KITS_WEBCONTAINER === '1'
+    ? createW3KitsMemoryDatabase(file) as unknown as SqliteDb
+    : new (require('better-sqlite3') as any)(file) as SqliteDb;
+  db.pragma?.('journal_mode = WAL');
+  db.pragma?.('foreign_keys = ON');
   migrate(db);
   dbInstance = db;
   dbFile = file;

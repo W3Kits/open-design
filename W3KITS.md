@@ -16,6 +16,7 @@
 - verifies the emitted W3Kits package with `scripts/verify-w3kits-webcontainer-package.mjs`
 - publishes `dist/` as the reviewed plugin artifact surface
 - pins WebContainer daemon startup to the WebContainer root so shared runtimes resolve `__w3kits/...` correctly
+- uses an in-memory sqlite adapter only when `W3KITS_WEBCONTAINER=1` so the browser runtime does not install native `better-sqlite3`
 
 ## What Stays Upstream-Owned
 

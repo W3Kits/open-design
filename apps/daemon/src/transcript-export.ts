@@ -55,7 +55,7 @@
 import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { projectDir } from './projects.js';
 
 const SCHEMA_VERSION = 2;

@@ -23,7 +23,7 @@
     "seed:test-projects": "node --experimental-strip-types scripts/seed-test-projects.ts",
     "seed:curated-design-skills": "node --experimental-strip-types scripts/seed-curated-design-skills.ts",
     "typecheck": "pnpm -r --workspace-concurrency=1 --if-present run typecheck && tsc -p scripts/tsconfig.json --noEmit",
-    "build": "pnpm --filter @open-design/contracts build && pnpm --filter @open-design/platform build && pnpm --filter @open-design/sidecar-proto build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/daemon build && W3KITS_PLUGIN_BUILD=1 pnpm --filter @open-design/web build && node scripts/prepare-w3kits-dist.mjs && node scripts/verify-w3kits-webcontainer-package.mjs",
+    "build": "pnpm --filter @open-design/contracts build && pnpm --filter @open-design/platform build && pnpm --filter @open-design/sidecar-proto build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/agui-adapter build && pnpm --filter @open-design/diagnostics build && pnpm --filter @open-design/plugin-runtime build && pnpm --filter @open-design/registry-protocol build && pnpm --filter @open-design/host build && pnpm --filter @open-design/daemon build && W3KITS_PLUGIN_BUILD=1 pnpm --filter @open-design/web build && node scripts/prepare-w3kits-dist.mjs && node scripts/verify-w3kits-webcontainer-package.mjs",
     "verify:w3kits-package": "node scripts/verify-w3kits-webcontainer-package.mjs"
   },
   "devDependencies": {

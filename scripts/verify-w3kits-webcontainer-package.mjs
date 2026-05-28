@@ -94,12 +94,20 @@ const requiredFiles = [
   '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/platform/dist/index.mjs',
   '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/sidecar/dist/index.mjs',
   '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/sidecar-proto/dist/index.mjs',
-  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/browser-vfs/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/agui-adapter/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/diagnostics/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/plugin-runtime/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/registry-protocol/dist/index.mjs',
+  '__w3kits/webcontainer-runtime/vendor_node_modules/@open-design/host/dist/index.mjs',
   '__w3kits/webcontainer-runtime/workspace-packages/@open-design/contracts/package.json',
   '__w3kits/webcontainer-runtime/workspace-packages/@open-design/platform/package.json',
   '__w3kits/webcontainer-runtime/workspace-packages/@open-design/sidecar/package.json',
   '__w3kits/webcontainer-runtime/workspace-packages/@open-design/sidecar-proto/package.json',
-  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/browser-vfs/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/agui-adapter/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/diagnostics/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/plugin-runtime/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/registry-protocol/package.json',
+  '__w3kits/webcontainer-runtime/workspace-packages/@open-design/host/package.json',
   '__w3kits/webcontainer-runtime/resources/skills',
   '__w3kits/webcontainer-runtime/resources/design-templates',
   '__w3kits/webcontainer-runtime/resources/design-systems',
@@ -112,7 +120,7 @@ for (const relativePath of requiredFiles) {
   assert(fs.existsSync(path.join(dist, relativePath)), `missing packaged runtime asset ${relativePath}`);
 }
 
-for (const packageName of ['contracts', 'platform', 'sidecar', 'sidecar-proto', 'browser-vfs']) {
+for (const packageName of ['contracts','platform','sidecar','sidecar-proto','agui-adapter','diagnostics','plugin-runtime','registry-protocol','host']) {
   assert(
     runtimePackage.dependencies?.[`@open-design/${packageName}`] === `file:./workspace-packages/@open-design/${packageName}`,
     `runtime package must install @open-design/${packageName} from packaged workspace files`,
